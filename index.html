@@ -357,6 +357,22 @@
       toHour.addEventListener('change', clearPlannedResults);
       toMinute.addEventListener('change', clearPlannedResults);
 
+      // Add click listeners to input parameters - when clicked after trip planning, clean map and show only from/to stations
+      function handleInputClick() {
+        if (tripPlanned) {
+          onChange(); // This already clears planned results and shows only from/to stations
+        }
+      }
+
+      fromInput.addEventListener('click', handleInputClick);
+      toInput.addEventListener('click', handleInputClick);
+      fromHour.addEventListener('click', handleInputClick);
+      fromMinute.addEventListener('click', handleInputClick);
+      toHour.addEventListener('click', handleInputClick);
+      toMinute.addEventListener('click', handleInputClick);
+      layoverHours.addEventListener('click', handleInputClick);
+      dayOfWeek.addEventListener('click', handleInputClick);
+
       function updateRouteText() {
         const fromTxt = validateStationInput(fromInput.value);
         const toTxt = validateStationInput(toInput.value);
@@ -425,6 +441,7 @@
       let currentFilterStation = null; // currently selected filter station
       let filterStationsStack = []; // stack of selected stations for cumulative filtering
       let currentlySelectedRoute = null; // track currently selected route for station styling
+      let tripPlanned = false; // track if a trip has been successfully planned
 
       // Clear planned results (path layer) and status text
       function clearPlannedResults() {
@@ -434,6 +451,7 @@
           try { pathLayer.clearLayers(); } catch (_) { /* ignore */ }
         }
         if (planStatus) planStatus.textContent = '';
+        tripPlanned = false; // Reset trip planned flag
       }
 
       function isChooseFromMapValue(val) {
@@ -1221,6 +1239,8 @@
           }
           
           if (pathRoutes.length > 0) {
+            // Mark that a trip has been successfully planned
+            tripPlanned = true;
             // Store original trip results globally for filtering
             originalPathRoutes = pathRoutes;
             filteredPathRoutes = pathRoutes; // Initially show all results

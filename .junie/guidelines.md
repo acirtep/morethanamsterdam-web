@@ -7,5 +7,5 @@ Follow the following principles:
 - Interface Segregation;
 - Dependency Inversion.
 
-Always ask for approval to commit and make sure to include all the files you have changed.
+When done, ask for approval to commit and make sure to include all the files you have changed.
 If approved, commit the changes by following conventional commits.
