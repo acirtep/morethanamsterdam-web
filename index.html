@@ -1109,7 +1109,7 @@
           }
 
           // Function to display all stations from all trip planning results on the map
-          function plotAllTripStationsOnMap(pathRoutes, selectedRoute = null) {
+          function plotAllTripStationsOnMap(pathRoutes, selectedRoute = null, userFromStation = null, userToStation = null) {
             stationsLayer.clearLayers();
             const allStations = new Map(); // Use Map to avoid duplicate stations
             const allCoords = [];
@@ -1196,10 +1196,29 @@
                 icon: markerIcon
               });
               
-              // Create popup content with filter and remove options
-              const popupContent = `
+              // Check if this station is the user-selected from/to station
+              // If userFromStation and userToStation are not provided, fall back to checking form inputs
+              let isFromToStation = false;
+              if (userFromStation && userToStation) {
+                isFromToStation = (station.code === userFromStation.code) || (station.code === userToStation.code);
+              } else {
+                // Fallback: check form inputs directly
+                const fromStationName = validateStationInput(fromInput.value);
+                const toStationName = validateStationInput(toInput.value);
+                const fromStation = byName.get(fromStationName.toLowerCase());
+                const toStation = byName.get(toStationName.toLowerCase());
+                isFromToStation = (fromStation && station.code === fromStation.code) || 
+                                 (toStation && station.code === toStation.code);
+              }
+
+              // Create popup content with conditional filter and remove options
+              let popupContent = `
                 <div style="text-align: center; padding: 5px;">
-                  <strong>${station.name}</strong><br>
+                  <strong>${station.name}</strong><br>`;
+              
+              // Only add Via/Skip buttons if this is not a from/to station
+              if (!isFromToStation) {
+                popupContent += `
                   <button onclick="filterResultsByStation({name: '${station.name}', code: '${station.code}', lat: ${station.lat}, lon: ${station.lon}})" 
                           style="margin: 3px; padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">
                     Via
@@ -1207,7 +1226,10 @@
                   <button onclick="removeStationFromMap('${station.code}')" 
                           style="margin: 3px; padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
                     Skip
-                  </button>
+                  </button>`;
+              }
+              
+              popupContent += `
                 </div>
               `;
               
@@ -1248,7 +1270,7 @@
             filterStationsStack = []; // Reset filter stack for new trip planning
             
             // Automatically display all stations from all routes on the map
-            plotAllTripStationsOnMap(pathRoutes, null); // No route selected initially
+            plotAllTripStationsOnMap(pathRoutes, null, fromStation, toStation); // No route selected initially
             
             // Stop the train animation if it exists
             const existingTrain = document.querySelector('.train');
