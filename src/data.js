@@ -196,7 +196,11 @@ export async function ensureServicesFileRegistered(dayOfWeek) {
   if (!resp.ok) throw new Error(`Failed to fetch ${filePath}`);
   const buf = new Uint8Array(await resp.arrayBuffer());
   await duckdbDb.registerFileBuffer(filePath, buf);
-  
+
+  const res = await fetch('./data/train_stations.csv');
+  if (!resp.ok) throw new Error(`Failed to fetch stations data`);
+  await duckdbDb.registerFileBuffer('./data/train_stations.csv', new Uint8Array(await res.arrayBuffer()));
+
   servicesRegistered = registrationKey;
 }
 

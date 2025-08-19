@@ -250,8 +250,9 @@
         // minutes 00,05,..,55
         for (let m = 0; m < 60; m += 5) {
           fromMinute.append(new Option(pad(m), pad(m)));
-          toMinute.append(new Option(pad(m), pad(m)));
+          // toMinute.append(new Option(pad(m), pad(m)));
         }
+          toMinute.append(new Option(pad(0), pad(0)));
       }
       populateTimeSelects();
       // Populate day-of-week picker (Monday..Sunday) and default to Saturday
@@ -265,11 +266,11 @@
       if (dayOfWeek) dayOfWeek.addEventListener('change', clearPlannedResults);
       // Initialize time defaults only (stations set after population)
       (function initTimeDefaults() {
-        fromHour.value = '08';
-        fromMinute.value = '00';
+        fromHour.value = '09';
+        fromMinute.value = '30';
         toHour.value = '22';
         toMinute.value = '00';
-        if (layoverHours) layoverHours.value = '02';
+        if (layoverHours) layoverHours.value = '03';
       })();
       // Optional: if times should influence summary later, these listeners are ready
       fromHour.addEventListener('change', updateRouteText);

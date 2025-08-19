@@ -30,8 +30,10 @@ planning AS (
         departure_time_tb,
         arrival_time_tb,
         0 AS end_reached,
-        to_municipality_sk
+        to_municipality_sk,
+        tss.number_of_monuments
     FROM train_schedule
+    JOIN './data/train_stations.csv' tss on to_station_code = station_code
     WHERE
         from_station_code = input_station_code
         AND hour(departure_time_tb) = input_hour_departure
@@ -57,12 +59,14 @@ planning AS (
         )::int) OVER (
             rows between unbounded preceding and unbounded following
         ) AS end_reached,
-        planning.to_municipality_sk
+        planning.to_municipality_sk,
+        planning.number_of_monuments + tss.number_of_monuments as number_of_monuments
     FROM planning
     JOIN train_schedule ts
         ON
             planning.to_station_code = ts.from_station_code
             AND time_bucket(INTERVAL '15 minutes', planning.arrival_time_tb + INTERVAL  (input_layover_time) HOUR) = time_bucket(INTERVAL '15 minutes', ts.departure_time_tb)
+    JOIN './data/train_stations.csv' tss on ts.to_station_code = tss.station_code
     WHERE
         (
         ( list_position(municipalities, ts.to_municipality_sk) IS NULL AND ts.to_municipality_sk != input_to_municipality_sk)
@@ -80,7 +84,8 @@ distinct_paths AS (
         travel_time,
         time_schedule,
         municipalities,
-        list_distinct(provinces) provinces
+        list_distinct(provinces) provinces,
+        number_of_monuments
     FROM planning
     WHERE
         to_station_code = input_to_station_code
@@ -94,7 +99,8 @@ optimal_paths AS (
         municipalities,
         time_schedule,
         len(provinces) AS m_p,
-        array_agg(municipalities) OVER (ORDER BY m_p desc rows between unbounded preceding and 1 preceding) as m_m
+        array_agg(municipalities) OVER (ORDER BY m_p desc rows between unbounded preceding and 1 preceding) as m_m,
+        number_of_monuments
     FROM distinct_paths
 )
 
@@ -103,4 +109,4 @@ SELECT
     time_schedule,
     len(list_intersect(municipalities, flatten(m_m))) as no_overlaps
 FROM optimal_paths
-ORDER BY no_overlaps ASC;
+ORDER BY no_overlaps ASC, number_of_monuments DESC;
