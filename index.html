@@ -839,10 +839,25 @@
           }
 
           let result;
+          
+          // Timeout wrapper function for queries
+          const executeQueryWithTimeout = async (queryPromise, timeoutMs = 15000) => {
+            return new Promise((resolve, reject) => {
+              const timeoutId = setTimeout(() => {
+                reject(new Error('unable to plan trip, increase the layover time'));
+              }, timeoutMs);
+              
+              queryPromise
+                .then(resolve)
+                .catch(reject)
+                .finally(() => clearTimeout(timeoutId));
+            });
+          };
+          
           try {
-            // Try parameterized queries first (preferred method)
+            // Try parameterized queries first (preferred method) with timeout
             const stmt = await duckdbConn.prepare(sqlTextCache);
-            result = await stmt.query({ 
+            const queryPromise = stmt.query({ 
               input_day_of_week: dow,
               input_station_code: stationCode,
               input_hour_departure: hourDeparture,
@@ -853,8 +868,14 @@
               input_layover_time: layoverTime,
               input_to_municipality_sk: toMunicipalitySk
             });
+            result = await executeQueryWithTimeout(queryPromise);
             await stmt.close();
           } catch (e) {
+            // Check if this is a timeout error
+            if (e.message === 'Unable to plan trip, increase the layover time') {
+              throw e; // Re-throw timeout error directly
+            }
+            
             // Security: Safe fallback with strict validation for controlled inputs
             if (!Number.isInteger(dow) || dow < 1 || dow > 7) {
               throw new Error('Invalid day of week parameter');
@@ -892,7 +913,10 @@
               .replaceAll(':input_to_station_code', `'${toStation.code.replace(/'/g, "''")}'`)
               .replaceAll(':input_layover_time', String(layoverTime))
               .replaceAll(':input_to_municipality_sk', `'${toMunicipalitySk.replace(/'/g, "''")}'`);
-            result = await duckdbConn.query(sqlInline);
+            
+            // Apply timeout to fallback query as well
+            const fallbackQueryPromise = duckdbConn.query(sqlInline);
+            result = await executeQueryWithTimeout(fallbackQueryPromise);
           }
 
           const rows = result.toArray();
@@ -1801,13 +1825,13 @@
             
             const errorDiv = document.createElement('div');
             errorDiv.style.cssText = 'margin-top: 16px; text-align: center; color: var(--danger); font-size: 16px;';
-            errorDiv.textContent = 'Unable to plan trip. Please try again later.';
+            errorDiv.textContent = 'Unable to plan trip. Increase layover time.';
             planStatus.appendChild(errorDiv);
             
             // Adjust map height to match results pane after content is added
             setTimeout(adjustMapHeight, 100);
           } else {
-            planStatus.textContent = 'Unable to plan trip. Please try again later.';
+            planStatus.textContent = 'Unable to plan trip. Increase layover time.';
           }
           
           // Security: Log detailed error internally but show generic message to user
