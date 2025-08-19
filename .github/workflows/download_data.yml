@@ -1,0 +1,46 @@
+name: download_data.yml
+on:
+  workflow_dispatch:
+    inputs:
+      execution_date:
+        description: 'execution_date'
+        required: true
+        default: '2025-07-31'
+
+jobs:
+  download-data:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install DuckDB CLI
+        run: |
+          curl https://install.duckdb.org | sh
+          /home/runner/.duckdb/cli/latest/duckdb --version
+
+      - name: Metrics before download
+        working-directory: data
+        run:
+          /home/runner/.duckdb/cli/latest/duckdb -c "summarize 'train_services.parquet/*/*.parquet'"
+
+      - name: Download data
+        working-directory: etl
+        run:
+          /home/runner/.duckdb/cli/latest/duckdb -c ".read download_data.sql" -c "execute download_data('${{ github.event.inputs.execution_date }}')"
+
+      - name: Store metrics after download
+        working-directory: data
+        run:
+          /home/runner/.duckdb/cli/latest/duckdb -c "summarize 'train_services.parquet/*/*.parquet'"
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'Refreshing data'
+          file_pattern: 'data/train_services.parquet/*'

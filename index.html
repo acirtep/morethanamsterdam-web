@@ -1,0 +1,1831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Netherlands Day Trip Planner</title>
+  <!-- Security: Content Security Policy to prevent XSS and restrict external resources -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https:; connect-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://extensions.duckdb.org; worker-src blob:; object-src 'none'; base-uri 'self'; form-action 'self';" />
+  <!-- Following the design cues from index.html -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand"><span class="flag">🇳🇱</span><span>Netherlands Day Trip Planner</span></div>
+    </div>
+    <div class="trip-form">
+      <div class="form-group">
+        <label for="fromStation">From Station</label>
+        <div class="input-row">
+          <div class="time-selects">
+            <select id="fromStation" aria-label="From station"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="fromHour">Departure</label>
+        <div class="input-row">
+          <div class="time-selects">
+            <select id="fromHour" aria-label="From hour"></select>
+            <span class="time-colon">:</span>
+            <select id="fromMinute" aria-label="From minute"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="toStation">To Station</label>
+        <div class="input-row">
+          <div class="time-selects">
+            <select id="toStation" aria-label="To station"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="toHour">Arrival</label>
+        <div class="input-row">
+          <div class="time-selects">
+            <select id="toHour" aria-label="To hour"></select>
+            <span class="time-colon">:</span>
+            <select id="toMinute" aria-label="To minute"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="layoverHours">Layover</label>
+        <div class="input-row">
+          <div class="time-selects">
+            <select id="layoverHours" aria-label="Layover hours"></select>
+            <span class="muted">hours</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="dayOfWeek">Day</label>
+        <div class="input-row">
+          <div class="time-selects">
+            <select id="dayOfWeek" aria-label="Day of week"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <div class="input-row">
+          <button id="planTripBtn" class="btn btn-compact" type="button">❯❯❯❯</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-area">
+      <div class="map-container">
+        <div id="map" aria-label="Netherlands map"></div>
+      </div>
+      <div class="results-section">
+        <div id="instructionsContent">
+          <h3 class="how-to-heading">How to Plan Your Day Trip</h3>
+          <div class="how-to-content">
+            <p><strong>From Station:</strong> Choose your departure station from the dropdown or select from the map</p>
+            <p><strong>Departure Time:</strong> Set when you want to leave your starting station</p>
+            <p><strong>To Station:</strong> Choose your destination station from the dropdown or select from the map</p>
+            <p><strong>Arrival Time:</strong> Set when you want to reach your destination</p>
+            <p><strong>Layover:</strong> How many hours you want to spend at your destination (1-5 hours)</p>
+            <p><strong>Day:</strong> Select the day of the week for your trip</p>
+            <p class="how-to-emphasis"><em>Fill in all fields and click the arrow button to get trip suggestions!</em></p>
+          </div>
+        </div>
+        <span class="status" id="planStatus" aria-live="polite"></span>
+      </div>
+    </div>
+    
+    <div class="disclaimer">
+      <strong>Disclaimer:</strong> This tool is based on historical data, downloaded from <a href="https://www.rijdendetreinen.nl/en/open-data" target="_blank">Rijden de Treinen</a>.
+      <br/> <br/> For up-to-date information, prices and real-time schedules, please check <a href="https://www.ns.nl/en/journeyplanner" target="_blank">NS Journey Planner</a> and <a href="https://www.ns.nl/en/tickets/day-ticket" target="_blank">their day ticket</a> for unlimited train travel.
+    </div>
+  </div>
+
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    // Security: Enhanced CSV parser with validation
+    function parseCSV(text) {
+      // Security: Validate input
+      if (!text || typeof text !== 'string') {
+        throw new Error('Invalid CSV input');
+      }
+      
+      // Security: Limit file size to prevent DoS
+      if (text.length > 1000000) { // 1MB limit
+        throw new Error('CSV file too large');
+      }
+      
+      // remove potential BOM
+      if (text.charCodeAt(0) === 0xFEFF) {
+        text = text.slice(1);
+      }
+      
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+      
+      // Security: Validate minimum structure
+      if (lines.length < 2) {
+        throw new Error('Invalid CSV structure');
+      }
+      
+      const header = lines.shift().split(',');
+      
+      // Security: Validate expected headers
+      const requiredHeaders = ['station_name', 'lon', 'lat', 'station_code', 'municipality_sk'];
+      const hasAllHeaders = requiredHeaders.every(h => header.includes(h));
+      if (!hasAllHeaders) {
+        throw new Error('CSV missing required headers');
+      }
+      
+      // Expect: station_id,station_name,station_code,lon,lat
+      const idx = {
+        station_code: header.indexOf('station_code'),
+        station_name: header.indexOf('station_name'),
+        lat: header.indexOf('lat'),
+        lon: header.indexOf('lon'),
+        municipality_sk: header.indexOf('municipality_sk')
+      };
+      
+      return lines.map((line, lineNum) => {
+        // Security: Basic CSV injection protection
+        if (line.startsWith('=') || line.startsWith('+') || line.startsWith('-') || line.startsWith('@')) {
+          console.warn(`Potential CSV injection attempt at line ${lineNum + 2}`);
+          return null;
+        }
+        
+        const parts = line.split(',');
+        
+        // Security: Validate field count
+        if (parts.length !== header.length) {
+          console.warn(`Invalid field count at line ${lineNum + 2}`);
+          return null;
+        }
+        
+        const name = parts[idx.station_name]?.trim();
+        const code = parts[idx.station_code]?.trim();
+        const lon = parseFloat(parts[idx.lon]);
+        const lat = parseFloat(parts[idx.lat]);
+        const municipalitySk = parts[idx.municipality_sk]?.trim();
+        
+        // Security: Enhanced validation
+        if (!name || name.length > 100 || Number.isNaN(lat) || Number.isNaN(lon)) {
+          return null;
+        }
+        
+        // Security: Validate coordinate ranges (Netherlands bounds)
+        if (lat < 50.0 || lat > 54.0 || lon < 3.0 || lon > 8.0) {
+          console.warn(`Coordinates out of Netherlands bounds at line ${lineNum + 2}`);
+          return null;
+        }
+        
+        // Security: Sanitize station name and municipality
+        const sanitizedName = name.replace(/[<>'"&]/g, '');
+        const sanitizedCode = code ? code.replace(/[<>'"&]/g, '') : '';
+        const sanitizedMunicipality = municipalitySk ? municipalitySk.replace(/[<>'"&]/g, '') : '';
+        
+        return { name: sanitizedName, code: sanitizedCode, lat, lon, municipalitySk: sanitizedMunicipality };
+      }).filter(Boolean);
+    }
+
+
+    async function loadStations() {
+      const res = await fetch('data/train_stations.csv');
+      if (!res.ok) throw new Error('Failed to load train_stations.csv');
+      const text = await res.text();
+      return parseCSV(text);
+    }
+
+
+    function populateStationSelects(stations) {
+      const fromSelect = document.getElementById('fromStation');
+      const toSelect = document.getElementById('toStation');
+      
+      // Clear both selects
+      fromSelect.innerHTML = '';
+      toSelect.innerHTML = '';
+      
+      // Add default "Choose a station" option first
+      const emptyOptFrom = document.createElement('option');
+      emptyOptFrom.value = '';
+      emptyOptFrom.textContent = 'Choose a station';
+      emptyOptFrom.selected = true;
+      fromSelect.appendChild(emptyOptFrom);
+      
+      const emptyOptTo = document.createElement('option');
+      emptyOptTo.value = '';
+      emptyOptTo.textContent = 'Choose a station';
+      emptyOptTo.selected = true;
+      toSelect.appendChild(emptyOptTo);
+      
+      // Add special option as the second item for both selects
+      const chooseOptFrom = document.createElement('option');
+      chooseOptFrom.value = 'Choose from map';
+      chooseOptFrom.textContent = 'Choose from map';
+      fromSelect.appendChild(chooseOptFrom);
+      
+      const chooseOptTo = document.createElement('option');
+      chooseOptTo.value = 'Choose from map';
+      chooseOptTo.textContent = 'Choose from map';
+      toSelect.appendChild(chooseOptTo);
+      
+      // Then add all stations alphabetically to both selects
+      stations
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach(s => {
+          const optFrom = document.createElement('option');
+          optFrom.value = s.name;
+          optFrom.textContent = s.name;
+          fromSelect.appendChild(optFrom);
+          
+          const optTo = document.createElement('option');
+          optTo.value = s.name;
+          optTo.textContent = s.name;
+          toSelect.appendChild(optTo);
+        });
+    }
+
+    function setupMap() {
+      const map = L.map('map', { attributionControl: true, zoomControl: true });
+      const nlCenter = [52.37, 5.4]; // More central location of Netherlands
+      map.setView(nlCenter, 7);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      return map;
+    }
+
+    function boundsForPoints(points) {
+      const lats = points.map(p => p.lat);
+      const lons = points.map(p => p.lon);
+      const southWest = L.latLng(Math.min(...lats), Math.min(...lons));
+      const northEast = L.latLng(Math.max(...lats), Math.max(...lons));
+      return L.latLngBounds(southWest, northEast);
+    }
+
+    (async function init() {
+      const map = setupMap();
+      let fromMarker = null;
+      let toMarker = null;
+      let line = null;
+      let pathLayer = null;
+      const stations = await loadStations().catch(err => {
+        console.error(err);
+        return [];
+      });
+      populateStationSelects(stations);
+
+      const byName = new Map(stations.map(s => [s.name.toLowerCase(), s]));
+      const byCode = new Map(stations.filter(s => s.code).map(s => [s.code, s]));
+      
+      
+      const fromInput = document.getElementById('fromStation');
+      const toInput = document.getElementById('toStation');
+      
+      // Initial map height adjustment after page load
+      setTimeout(adjustMapHeight, 500);
+      
+      // Adjust map height on window resize
+      window.addEventListener('resize', adjustMapHeight);
+      // Time controls (dropdowns with 5-min steps)
+      const fromHour = document.getElementById('fromHour');
+      const fromMinute = document.getElementById('fromMinute');
+      const toHour = document.getElementById('toHour');
+      const toMinute = document.getElementById('toMinute');
+      const layoverHours = document.getElementById('layoverHours');
+      const dayOfWeek = document.getElementById('dayOfWeek');
+      const planBtn = document.getElementById('planTripBtn');
+      const planStatus = document.getElementById('planStatus');
+
+      function pad(n) { return String(n).padStart(2, '0'); }
+      function populateTimeSelects() {
+        // hours 00..23 for From/To
+        for (let h = 0; h < 24; h++) {
+          fromHour.append(new Option(pad(h), pad(h)));
+          toHour.append(new Option(pad(h), pad(h)));
+        }
+        // layover hours restricted to 01..05
+        if (layoverHours) {
+          for (let h = 1; h <= 5; h++) {
+            layoverHours.append(new Option(pad(h), pad(h)));
+          }
+        }
+        // Changing layover should remove previously planned results
+        if (layoverHours) layoverHours.addEventListener('change', clearPlannedResults);
+        // minutes 00,05,..,55
+        for (let m = 0; m < 60; m += 5) {
+          fromMinute.append(new Option(pad(m), pad(m)));
+          toMinute.append(new Option(pad(m), pad(m)));
+        }
+      }
+      populateTimeSelects();
+      // Populate day-of-week picker (Monday..Sunday) and default to Saturday
+      (function populateDays() {
+        if (!dayOfWeek) return;
+        const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        days.forEach(d => dayOfWeek.append(new Option(d, d)));
+        dayOfWeek.value = 'Saturday';
+      })();
+      // Changing day should remove previously planned results
+      if (dayOfWeek) dayOfWeek.addEventListener('change', clearPlannedResults);
+      // Initialize time defaults only (stations set after population)
+      (function initTimeDefaults() {
+        fromHour.value = '08';
+        fromMinute.value = '00';
+        toHour.value = '22';
+        toMinute.value = '00';
+        if (layoverHours) layoverHours.value = '02';
+      })();
+      // Optional: if times should influence summary later, these listeners are ready
+      fromHour.addEventListener('change', updateRouteText);
+      fromMinute.addEventListener('change', updateRouteText);
+      toHour.addEventListener('change', updateRouteText);
+      toMinute.addEventListener('change', updateRouteText);
+
+      // Any change to time pickers should remove previously planned results
+      fromHour.addEventListener('change', clearPlannedResults);
+      fromMinute.addEventListener('change', clearPlannedResults);
+      toHour.addEventListener('change', clearPlannedResults);
+      toMinute.addEventListener('change', clearPlannedResults);
+
+      function updateRouteText() {
+        const fromTxt = validateStationInput(fromInput.value);
+        const toTxt = validateStationInput(toInput.value);
+        const instructionsContent = document.getElementById('instructionsContent');
+        
+        // Show instructions when only one station is selected (from or to, but not both)
+        const hasFromStation = !!fromTxt;
+        const hasToStation = !!toTxt;
+        const exactlyOneStation = (hasFromStation && !hasToStation) || (!hasFromStation && hasToStation);
+        
+        if (exactlyOneStation || (!hasFromStation && !hasToStation)) {
+          // Show instructions if exactly one station is selected OR no stations selected
+          if (instructionsContent) instructionsContent.style.display = 'block';
+        } else {
+          // Hide instructions if both stations are selected
+          if (instructionsContent) instructionsContent.style.display = 'none';
+        }
+      }
+
+      // Function to adjust map height based on result pane height
+      function adjustMapHeight() {
+        const resultsSection = document.querySelector('.results-section');
+        const mapContainer = document.querySelector('.map-container');
+        
+        if (resultsSection && mapContainer) {
+          const resultsHeight = resultsSection.offsetHeight;
+          mapContainer.style.height = resultsHeight + 'px';
+          
+          // Invalidate map size after height change
+          setTimeout(() => {
+            if (map) {
+              map.invalidateSize();
+            }
+          }, 100);
+        }
+      }
+
+      function placeMarker(existing, station, color, isFromTo = false) {
+        if (existing) {
+          map.removeLayer(existing);
+        }
+        const marker = L.circleMarker([station.lat, station.lon], {
+          radius: isFromTo ? 12 : 8, // Bigger markers for from/to stations
+          color,
+          fillColor: color,
+          fillOpacity: 0.8,
+          weight: isFromTo ? 3 : 2 // Thicker border for from/to stations
+        }).addTo(map);
+        marker.bindPopup(`${station.name}`);
+        return marker;
+      }
+
+      function drawLine(a, b) {
+        if (line) map.removeLayer(line);
+        line = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: '#007bff', weight: 3, opacity: 0.8 }).addTo(map);
+      }
+
+      // Map-selection helpers
+      const stationsLayer = L.layerGroup();
+      const plannedLayer = L.layerGroup();
+      plannedLayer.addTo(map);
+      let mapSelectTarget = null; // which input is selecting via map
+      let allStationMarkers = null;
+      let originalPathRoutes = null; // store original trip results for filtering
+      let filteredPathRoutes = null; // store currently filtered results
+      let currentFilterStation = null; // currently selected filter station
+      let filterStationsStack = []; // stack of selected stations for cumulative filtering
+      let currentlySelectedRoute = null; // track currently selected route for station styling
+
+      // Clear planned results (path layer) and status text
+      function clearPlannedResults() {
+        try { plannedLayer.clearLayers(); } catch (_) { /* ignore */ }
+        // Clear path layer if it exists (will be defined later in runPlanTrip)
+        if (typeof pathLayer !== 'undefined') {
+          try { pathLayer.clearLayers(); } catch (_) { /* ignore */ }
+        }
+        if (planStatus) planStatus.textContent = '';
+      }
+
+      function isChooseFromMapValue(val) {
+        const v = (val || '').trim().toLowerCase();
+        return v === 'choose from map' || v.startsWith('choose from map');
+      }
+
+      function buildAllStationMarkers() {
+        if (allStationMarkers) return;
+        allStationMarkers = stations.map(s => {
+          const m = L.circleMarker([s.lat, s.lon], {
+            radius: 5,
+            color: '#17a2b8',
+            fillColor: '#17a2b8',
+            fillOpacity: 0.9,
+            weight: 1
+          });
+          m.bindTooltip(`${s.name}`);
+
+          const selectStation = (e) => {
+            // Ensure first interaction selects the station
+            if (e && e.originalEvent) {
+              try { e.originalEvent.preventDefault(); } catch (_) {}
+              try { e.originalEvent.stopPropagation(); } catch (_) {}
+            }
+            if (!mapSelectTarget) return;
+            mapSelectTarget.value = s.name;
+            exitMapSelect();
+            onChange();
+            validatePlanButton();
+          };
+
+          // Bind to early interaction events to avoid needing a second click
+          m.on({ mousedown: selectStation, touchstart: selectStation, click: selectStation });
+          return m;
+        });
+      }
+
+      function enterMapSelect(target) {
+        mapSelectTarget = target;
+        buildAllStationMarkers();
+        stationsLayer.clearLayers();
+        allStationMarkers.forEach(m => m.addTo(stationsLayer));
+        stationsLayer.addTo(map);
+        try {
+          const b = boundsForPoints(stations);
+          map.fitBounds(b.pad(0.1));
+        } catch (e) { /* ignore */ }
+      }
+
+      function exitMapSelect() {
+        if (map.hasLayer(stationsLayer)) map.removeLayer(stationsLayer);
+        stationsLayer.clearLayers();
+        mapSelectTarget = null;
+      }
+
+      // Function to show all stations on the map
+      function showAllStations() {
+        buildAllStationMarkers();
+        stationsLayer.clearLayers();
+        allStationMarkers.forEach(m => m.addTo(stationsLayer));
+        stationsLayer.addTo(map);
+        try {
+          const b = boundsForPoints(stations);
+          map.fitBounds(b.pad(0.1));
+        } catch (e) { /* ignore */ }
+      }
+
+      // Function to hide all stations from the map
+      function hideAllStations() {
+        if (map.hasLayer(stationsLayer)) map.removeLayer(stationsLayer);
+        stationsLayer.clearLayers();
+      }
+
+      function onChange() {
+        // Any change in From/To should remove previously planned results
+        clearPlannedResults();
+        // Clear all stations from map to show only from/to stations
+        hideAllStations();
+        // Clear path layer if it exists
+        if (pathLayer) {
+          try { 
+            pathLayer.clearLayers(); 
+            if (map.hasLayer(pathLayer)) map.removeLayer(pathLayer);
+          } catch (_) { /* ignore */ }
+        }
+        const fromValue = validateStationInput(fromInput.value);
+        const toValue = validateStationInput(toInput.value);
+        const f = byName.get(fromValue.toLowerCase());
+        const t = byName.get(toValue.toLowerCase());
+        updateRouteText();
+        if (f) {
+          fromMarker = placeMarker(fromMarker, f, '#007bff', true);
+        } else if (fromMarker) {
+          map.removeLayer(fromMarker); fromMarker = null;
+        }
+        if (t) {
+          toMarker = placeMarker(toMarker, t, '#ff8c00', true);
+        } else if (toMarker) {
+          map.removeLayer(toMarker); toMarker = null;
+        }
+        if (f && t) {
+          // drawLine(f, t); // Removed line drawing as requested
+          const b = boundsForPoints([f, t]);
+          map.fitBounds(b.pad(0.2));
+        } else if (line) {
+          map.removeLayer(line); line = null;
+        }
+      }
+
+      // Function to validate both stations are selected and enable/disable plan button
+      function validatePlanButton() {
+        const fromValid = validateStationInput(fromInput.value) && 
+                         !isChooseFromMapValue(fromInput.value) && 
+                         fromInput.value.trim() !== '';
+        const toValid = validateStationInput(toInput.value) && 
+                       !isChooseFromMapValue(toInput.value) && 
+                       toInput.value.trim() !== '';
+        planBtn.disabled = !(fromValid && toValid);
+      }
+
+      fromInput.addEventListener('change', () => {
+        if (isChooseFromMapValue(fromInput.value)) { enterMapSelect(fromInput); updateRouteText(); validatePlanButton(); return; }
+        if (mapSelectTarget === fromInput) exitMapSelect();
+        onChange();
+        validatePlanButton();
+      });
+      toInput.addEventListener('change', () => {
+        if (isChooseFromMapValue(toInput.value)) { enterMapSelect(toInput); updateRouteText(); validatePlanButton(); return; }
+        if (mapSelectTarget === toInput) exitMapSelect();
+        onChange();
+        validatePlanButton();
+      });
+
+      // Initially disable the plan button until both stations are selected
+      planBtn.disabled = true;
+
+
+      // DuckDB-Wasm setup for Plan Trip
+      let duckdbConn = null;
+      let duckdbDb = null;
+      let duckdbReady = false;
+      let sqlTextCache = null;
+      let macroSqlCache = null;
+      let macroExecuted = false;
+      let servicesRegistered = false;
+
+      async function ensureDuckDB() {
+        if (duckdbReady) return;
+        
+        // Security: Use specific version with integrity verification
+        const DUCKDB_VERSION = '1.29.1-dev269.0';
+        const duckdb = await import(`https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`);
+        const bundles = duckdb.getJsDelivrBundles();
+        const bundle = await duckdb.selectBundle(bundles);
+
+        // Security: Validate URLs are from trusted CDN
+        function validateWorkerUrl(url) {
+          try {
+            const urlObj = new URL(url);
+            if (!urlObj.hostname.includes('cdn.jsdelivr.net')) {
+              throw new Error(`Untrusted worker URL: ${url}`);
+            }
+            return true;
+          } catch (e) {
+            throw new Error(`Invalid worker URL: ${url}`);
+          }
+        }
+
+        // Create a same-origin Blob URL for the worker with security validation
+        async function makeBlobWorker(url) {
+          validateWorkerUrl(url);
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(`Failed to fetch worker: ${url} (${resp.status})`);
+          
+          // Security: Validate content type
+          const contentType = resp.headers.get('content-type');
+          if (!contentType || !contentType.includes('javascript')) {
+            throw new Error(`Invalid content type for worker: ${contentType}`);
+          }
+          
+          const code = await resp.text();
+          
+          // Security: Basic validation of worker code structure
+          if (!code.includes('self.onmessage') && !code.includes('addEventListener')) {
+            throw new Error('Worker code does not appear to be a valid web worker');
+          }
+          
+          const blob = new Blob([code], { type: 'text/javascript' });
+          const blobUrl = URL.createObjectURL(blob);
+          return new Worker(blobUrl);
+        }
+
+        // Security: Remove fallback to direct URL to prevent bypass
+        const worker = await makeBlobWorker(bundle.mainWorker);
+
+        const logger = new duckdb.ConsoleLogger();
+        duckdbDb = new duckdb.AsyncDuckDB(logger, worker);
+
+        // If pthreadWorker exists, also convert it to a blob URL with validation
+        let pthreadUrl = null;
+        if (bundle.pthreadWorker) {
+          validateWorkerUrl(bundle.pthreadWorker);
+          const resp = await fetch(bundle.pthreadWorker);
+          if (resp.ok) {
+            const contentType = resp.headers.get('content-type');
+            if (contentType && contentType.includes('javascript')) {
+              const code = await resp.text();
+              if (code.includes('self.onmessage') || code.includes('addEventListener')) {
+                pthreadUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+              } else {
+                throw new Error('Pthread worker code validation failed');
+              }
+            } else {
+              throw new Error('Invalid pthread worker content type');
+            }
+          } else {
+            throw new Error(`Failed to fetch pthread worker: ${resp.status}`);
+          }
+        }
+
+        await duckdbDb.instantiate(bundle.mainModule, pthreadUrl);
+        duckdbConn = await duckdbDb.connect();
+        duckdbReady = true;
+      }
+
+      async function ensureServicesFileRegistered(dayOfWeek) {
+        // Security: Validate day of week parameter
+        if (!Number.isInteger(dayOfWeek) || dayOfWeek < 1 || dayOfWeek > 7) {
+          throw new Error('Invalid day of week parameter');
+        }
+        
+        const registrationKey = `services_dow_${dayOfWeek}`;
+        if (servicesRegistered === registrationKey) return;
+        
+        // Register only the parquet file for the specific day of week
+        const filePath = `./data/train_services.parquet/day_of_week=${dayOfWeek}/data_0.parquet`;
+        const resp = await fetch(filePath);
+        if (!resp.ok) throw new Error(`Failed to fetch ${filePath}`);
+        const buf = new Uint8Array(await resp.arrayBuffer());
+        await duckdbDb.registerFileBuffer(filePath, buf);
+        
+        servicesRegistered = registrationKey;
+      }
+
+      async function ensureMacroExecuted() {
+        if (macroExecuted) return;
+        
+        if (!macroSqlCache) {
+          const macroResp = await fetch('etl/create_macro.sql');
+          if (!macroResp.ok) throw new Error('Failed to load etl/create_macro.sql');
+          macroSqlCache = await macroResp.text();
+        }
+        
+        // Execute the macro creation SQL
+        await duckdbConn.query(macroSqlCache);
+        macroExecuted = true;
+      }
+
+      // Security: Validate and sanitize day of week input
+      function dayNameToIsoDow(name) {
+        const validDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        const sanitizedName = String(name || '').trim();
+        const idx = validDays.indexOf(sanitizedName);
+        if (idx < 0) {
+          console.warn(`Invalid day name: ${sanitizedName}, defaulting to Monday`);
+          return 1; // Default to Monday
+        }
+        return idx + 1; // Monday=1..Sunday=7
+      }
+      
+      // Security: Validate station input
+      function validateStationInput(input) {
+        if (!input || typeof input !== 'string') return '';
+        const sanitized = input.trim();
+        // Limit length to prevent potential buffer overflow attacks
+        if (sanitized.length > 100) {
+          console.warn('Station name too long, truncating');
+          return sanitized.substring(0, 100);
+        }
+        // Remove potentially dangerous characters
+        return sanitized.replace(/[<>'"&]/g, '');
+      }
+
+      async function runPlanTrip() {
+        try {
+          planBtn.disabled = true; 
+          // Create safe status display to prevent XSS
+          planStatus.innerHTML = '';
+          
+          // Get station names for the train animation
+          const fromStationDisplay = validateStationInput(fromInput.value) || 'FROM';
+          const toStationDisplay = validateStationInput(toInput.value) || 'TO';
+          
+          // Create train animation container
+          const trainContainer = document.createElement('div');
+          trainContainer.className = 'train-container';
+          
+          const fromLabel = document.createElement('div');
+          fromLabel.className = 'station-label';
+          fromLabel.style.cssText = 'background: color-mix(in srgb, #007bff 10%, transparent); border-color: color-mix(in srgb, #007bff 30%, transparent); color: #007bff;';
+          fromLabel.textContent = fromStationDisplay;
+          
+          const trackContainer = document.createElement('div');
+          trackContainer.className = 'train-track';
+          
+          const train = document.createElement('div');
+          train.className = 'train';
+          train.textContent = '🚆';
+          trackContainer.appendChild(train);
+          
+          const toLabel = document.createElement('div');
+          toLabel.className = 'station-label';
+          toLabel.style.cssText = 'background: color-mix(in srgb, #ff8c00 10%, transparent); border-color: color-mix(in srgb, #ff8c00 30%, transparent); color: #ff8c00;';
+          toLabel.textContent = toStationDisplay;
+          
+          trainContainer.appendChild(fromLabel);
+          trainContainer.appendChild(trackContainer);
+          trainContainer.appendChild(toLabel);
+          
+          const statusText = document.createElement('div');
+          statusText.className = 'planning-status-text';
+          statusText.style.cssText = 'margin-top: 10px; color: var(--muted); font-size: 14px;';
+          statusText.textContent = 'Planning your trip...';
+          
+          planStatus.appendChild(trainContainer);
+          planStatus.appendChild(statusText);
+          await ensureDuckDB();
+          await ensureMacroExecuted();
+          
+          // Extract and validate day of week parameter first
+          const dow = dayNameToIsoDow(dayOfWeek.value);
+          await ensureServicesFileRegistered(dow);
+          
+          // Use the macro defined in create_macro.sql instead of external SQL file
+          sqlTextCache = `
+            SELECT * FROM get_trips(
+              :input_day_of_week,
+              :input_station_code,
+              :input_hour_departure,
+              :input_minute_departure,
+              :input_to_station_code,
+              :input_hour_arrival,
+              :input_minute_arrival,
+              :input_layover_time,
+              :input_to_municipality_sk
+            )
+          `;
+          
+          // Get station code from fromStation selection
+          const fromStationName = validateStationInput(fromInput.value);
+          if (!fromStationName) {
+            throw new Error('Please select a departure station');
+          }
+          const fromStation = byName.get(fromStationName.toLowerCase());
+          if (!fromStation || !fromStation.code) {
+            throw new Error('Invalid departure station selected');
+          }
+          const stationCode = fromStation.code;
+          
+          // Validate to station is also selected
+          const toStationName = validateStationInput(toInput.value);
+          if (!toStationName) {
+            throw new Error('Please select a destination station');
+          }
+          const toStation = byName.get(toStationName.toLowerCase());
+          if (!toStation || !toStation.code) {
+            throw new Error('Invalid destination station selected');
+          }
+          
+          // Get departure time from selects
+          const hourDeparture = parseInt(fromHour.value, 10);
+          const minuteDeparture = parseInt(fromMinute.value, 10);
+          
+          // Get arrival time from selects
+          const hourArrival = parseInt(toHour.value, 10);
+          const minuteArrival = parseInt(toMinute.value, 10);
+          
+          // Get layover time from select
+          const layoverTime = parseInt(layoverHours.value, 10);
+          
+          // Get municipality_sk for the destination station
+          const toMunicipalitySk = toStation.municipalitySk;
+          if (!toMunicipalitySk) {
+            throw new Error('Municipality mapping not found for destination station');
+          }
+          
+          // Security: Validate time parameters
+          if (!Number.isInteger(hourDeparture) || hourDeparture < 0 || hourDeparture > 23) {
+            throw new Error('Invalid departure hour');
+          }
+          if (!Number.isInteger(minuteDeparture) || minuteDeparture < 0 || minuteDeparture > 59) {
+            throw new Error('Invalid departure minute');
+          }
+          if (!Number.isInteger(hourArrival) || hourArrival < 0 || hourArrival > 23) {
+            throw new Error('Invalid arrival hour');
+          }
+          if (!Number.isInteger(minuteArrival) || minuteArrival < 0 || minuteArrival > 59) {
+            throw new Error('Invalid arrival minute');
+          }
+          if (!Number.isInteger(layoverTime) || layoverTime < 1 || layoverTime > 5) {
+            throw new Error('Invalid layover time');
+          }
+
+          let result;
+          try {
+            // Try parameterized queries first (preferred method)
+            const stmt = await duckdbConn.prepare(sqlTextCache);
+            result = await stmt.query({ 
+              input_day_of_week: dow,
+              input_station_code: stationCode,
+              input_hour_departure: hourDeparture,
+              input_minute_departure: minuteDeparture,
+              input_hour_arrival: hourArrival,
+              input_minute_arrival: minuteArrival,
+              input_to_station_code: toStation.code,
+              input_layover_time: layoverTime,
+              input_to_municipality_sk: toMunicipalitySk
+            });
+            await stmt.close();
+          } catch (e) {
+            // Security: Safe fallback with strict validation for controlled inputs
+            if (!Number.isInteger(dow) || dow < 1 || dow > 7) {
+              throw new Error('Invalid day of week parameter');
+            }
+            if (!stationCode || typeof stationCode !== 'string' || stationCode.length > 10) {
+              throw new Error('Invalid station code parameter');
+            }
+            if (!toStation.code || typeof toStation.code !== 'string' || toStation.code.length > 10) {
+              throw new Error('Invalid destination station code parameter');
+            }
+            if (!Number.isInteger(hourDeparture) || hourDeparture < 0 || hourDeparture > 23) {
+              throw new Error('Invalid departure hour parameter');
+            }
+            if (!Number.isInteger(minuteDeparture) || minuteDeparture < 0 || minuteDeparture > 59) {
+              throw new Error('Invalid departure minute parameter');
+            }
+            if (!Number.isInteger(hourArrival) || hourArrival < 0 || hourArrival > 23) {
+              throw new Error('Invalid arrival hour parameter');
+            }
+            if (!Number.isInteger(minuteArrival) || minuteArrival < 0 || minuteArrival > 59) {
+              throw new Error('Invalid arrival minute parameter');
+            }
+            if (!Number.isInteger(layoverTime) || layoverTime < 1 || layoverTime > 5) {
+              throw new Error('Invalid layover time parameter');
+            }
+            
+            // Safe replacement with strictly validated parameters
+            const sqlInline = sqlTextCache
+              .replaceAll(':input_day_of_week', String(dow))
+              .replaceAll(':input_station_code', `'${stationCode.replace(/'/g, "''")}'`)
+              .replaceAll(':input_hour_departure', String(hourDeparture))
+              .replaceAll(':input_minute_departure', String(minuteDeparture))
+              .replaceAll(':input_hour_arrival', String(hourArrival))
+              .replaceAll(':input_minute_arrival', String(minuteArrival))
+              .replaceAll(':input_to_station_code', `'${toStation.code.replace(/'/g, "''")}'`)
+              .replaceAll(':input_layover_time', String(layoverTime))
+              .replaceAll(':input_to_municipality_sk', `'${toMunicipalitySk.replace(/'/g, "''")}'`);
+            result = await duckdbConn.query(sqlInline);
+          }
+
+          const rows = result.toArray();
+          
+          // Extract paths and time_schedule from results
+          const pathsWithSchedule = rows.map(r => {
+            if (!r) return null;
+            
+            let pathVector = null;
+            let timeScheduleVector = null;
+            
+            if (Array.isArray(r)) {
+              pathVector = r[0]; // First column contains the path vector
+              timeScheduleVector = r[1]; // Second column contains the time_schedule vector
+            } else if (typeof r === 'object') {
+              if ('path' in r) {
+                pathVector = r.path;
+                timeScheduleVector = r.time_schedule;
+              } else {
+                const keys = Object.keys(r);
+                if (keys.length >= 2) {
+                  pathVector = r[keys[0]];
+                  timeScheduleVector = r[keys[1]];
+                } else if (keys.length === 1) {
+                  pathVector = r[keys[0]];
+                }
+              }
+            }
+            
+            // Convert DuckDB Vector to JavaScript array for path
+            let pathArray = null;
+            if (pathVector && typeof pathVector === 'object' && pathVector.length !== undefined && pathVector.get) {
+              pathArray = [];
+              for (let i = 0; i < pathVector.length; i++) {
+                const stationCode = pathVector.get(i);
+                if (stationCode) {
+                  pathArray.push(stationCode);
+                }
+              }
+            } else if (Array.isArray(pathVector)) {
+              pathArray = pathVector;
+            }
+            
+            // Convert DuckDB Vector to JavaScript array for time_schedule
+            let timeScheduleArray = null;
+            if (timeScheduleVector && typeof timeScheduleVector === 'object' && timeScheduleVector.length !== undefined && timeScheduleVector.get) {
+              timeScheduleArray = [];
+              for (let i = 0; i < timeScheduleVector.length; i++) {
+                const timestamp = timeScheduleVector.get(i);
+                if (timestamp) {
+                  timeScheduleArray.push(timestamp);
+                }
+              }
+            } else if (Array.isArray(timeScheduleVector)) {
+              timeScheduleArray = timeScheduleVector;
+            }
+            
+            if (pathArray && pathArray.length > 0) {
+              return { path: pathArray, timeSchedule: timeScheduleArray };
+            }
+            return null;
+          }).filter(Boolean);
+          
+          // Helper function to calculate travel time between two timestamps
+          function calculateTravelTime(startTime, endTime) {
+            if (!startTime || !endTime) return null;
+            try {
+              const start = new Date(startTime);
+              const end = new Date(endTime);
+              const diffMs = end - start;
+              const hours = Math.floor(diffMs / (1000 * 60 * 60));
+              const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+              
+              if (hours > 0) {
+                return `${hours}h:${minutes.toString().padStart(2, '0')}m`;
+              } else {
+                return `${minutes}m`;
+              }
+            } catch (e) {
+              console.warn('Error calculating travel time:', e);
+              return null;
+            }
+          }
+          
+          // Prepare path data for clickable display (don't plot automatically)
+          plannedLayer.clearLayers();
+          const pathRoutes = [];
+          
+          pathsWithSchedule.forEach((pathData, pathIndex) => {
+            const pathStations = [];
+            
+            // Convert station codes to station objects
+            pathData.path.forEach(code => {
+              const station = byCode.get(String(code));
+              if (station) {
+                pathStations.push(station);
+              }
+            });
+            
+            if (pathStations.length >= 2) {
+              const pathColor = `hsl(${(pathIndex * 60) % 360}, 70%, 50%)`; // Different color for each path
+              pathRoutes.push({ 
+                pathStations, 
+                pathColor, 
+                pathArray: pathData.path, 
+                timeSchedule: pathData.timeSchedule 
+              });
+            }
+          });
+          
+          // Initialize global path layer if not exists (stationsLayer already exists globally)
+          if (!pathLayer) {
+            pathLayer = L.layerGroup();
+          }
+          
+          // Function to plot a specific path on the map (preserves existing stations)
+          function plotPathOnMap(route) {
+            // Clear only the path layer, keep stations
+            pathLayer.clearLayers();
+            
+            const pathCoords = route.pathStations.map(station => [station.lat, station.lon]);
+            
+            // Draw path as a red polyline
+            const polyline = L.polyline(pathCoords, { 
+              color: '#FF0000',  // Always red color
+              weight: 4, 
+              opacity: 0.8 
+            });
+            polyline.addTo(pathLayer);
+            
+            // Add purple markers with path indices for stations in this specific path
+            route.pathStations.forEach((station, stationIndex) => {
+              const markerColor = '#6f42c1'; // Purple for all path stations
+              const size = 20;
+              
+              // Create custom DivIcon with path index number inside
+              const markerIcon = L.divIcon({
+                html: `<div style="
+                  width: ${size}px; 
+                  height: ${size}px; 
+                  background-color: ${markerColor}; 
+                  border: 2px solid white; 
+                  border-radius: 50%; 
+                  display: flex; 
+                  align-items: center; 
+                  justify-content: center; 
+                  font-weight: bold; 
+                  font-size: 10px; 
+                  color: white; 
+                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                ">${stationIndex + 1}</div>`,
+                className: 'custom-path-station-marker',
+                iconSize: [size, size],
+                iconAnchor: [size/2, size/2]
+              });
+              
+              const marker = L.marker([station.lat, station.lon], { 
+                icon: markerIcon
+              });
+              marker.bindTooltip(`${stationIndex + 1}. ${station.name}`);
+              marker.addTo(pathLayer);
+            });
+            
+            // Add path layer to map if not already added
+            if (!map.hasLayer(pathLayer)) {
+              pathLayer.addTo(map);
+            }
+            
+            // Fit map to show the path
+            const bounds = L.latLngBounds(pathCoords);
+            map.fitBounds(bounds.pad(0.15));
+          }
+
+          // Function to display all stations from all trip planning results on the map
+          function plotAllTripStationsOnMap(pathRoutes, selectedRoute = null) {
+            stationsLayer.clearLayers();
+            const allStations = new Map(); // Use Map to avoid duplicate stations
+            const allCoords = [];
+            
+            // Collect all unique stations from all paths
+            pathRoutes.forEach((route, routeIndex) => {
+              route.pathStations.forEach(station => {
+                if (!allStations.has(station.code)) {
+                  allStations.set(station.code, {
+                    station: station,
+                    routeIndexes: [routeIndex]
+                  });
+                  allCoords.push([station.lat, station.lon]);
+                } else {
+                  // Station already exists, add route index
+                  allStations.get(station.code).routeIndexes.push(routeIndex);
+                }
+              });
+            });
+            
+            // Add markers for all unique stations
+            allStations.forEach((stationData, stationCode) => {
+              const station = stationData.station;
+              
+              // Check if this station is part of the currently selected path
+              let isInSelectedPath = false;
+              let stationIndexInPath = -1;
+              
+              if (selectedRoute) {
+                const pathStationIndex = selectedRoute.pathStations.findIndex(s => s.code === station.code);
+                if (pathStationIndex >= 0) {
+                  isInSelectedPath = true;
+                  stationIndexInPath = pathStationIndex;
+                }
+              }
+              
+              let markerIcon;
+              if (isInSelectedPath) {
+                // Use the same style as in plotPathOnMap for selected path stations
+                const markerColor = '#6f42c1'; // Purple
+                const size = 20;
+                
+                markerIcon = L.divIcon({
+                  html: `<div style="
+                    width: ${size}px; 
+                    height: ${size}px; 
+                    background-color: ${markerColor}; 
+                    border: 2px solid white; 
+                    border-radius: 50%; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center; 
+                    font-weight: bold; 
+                    font-size: 10px; 
+                    color: white; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                  ">${stationIndexInPath + 1}</div>`,
+                  className: 'custom-path-station-marker',
+                  iconSize: [size, size],
+                  iconAnchor: [size/2, size/2]
+                });
+              } else {
+                // Regular background stations - opaque purple without labels
+                const markerColor = '#6f42c1'; // Purple
+                const size = 16;
+                
+                markerIcon = L.divIcon({
+                  html: `<div style="
+                    width: ${size}px; 
+                    height: ${size}px; 
+                    background-color: ${markerColor}; 
+                    border: 2px solid white; 
+                    border-radius: 50%; 
+                    opacity: 0.6;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                  "></div>`,
+                  className: 'custom-background-station-marker',
+                  iconSize: [size, size],
+                  iconAnchor: [size/2, size/2]
+                });
+              }
+              
+              const marker = L.marker([station.lat, station.lon], { 
+                icon: markerIcon
+              });
+              
+              // Create popup content with filter and remove options
+              const popupContent = `
+                <div style="text-align: center; padding: 5px;">
+                  <strong>${station.name}</strong><br>
+                  <button onclick="filterResultsByStation({name: '${station.name}', code: '${station.code}', lat: ${station.lat}, lon: ${station.lon}})" 
+                          style="margin: 3px; padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                    Via
+                  </button><br>
+                  <button onclick="removeStationFromMap('${station.code}')" 
+                          style="margin: 3px; padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                    Skip
+                  </button>
+                </div>
+              `;
+              
+              marker.bindPopup(popupContent);
+              
+              // Add tooltip for hover
+              const tooltipText = isInSelectedPath ? 
+                `${stationIndexInPath + 1}. ${station.name} - Click for options` :
+                `${station.name} - Click for options`;
+                
+              marker.bindTooltip(tooltipText, {
+                direction: 'top',
+                offset: [0, -8]
+              });
+              
+              marker.addTo(stationsLayer);
+            });
+            
+            // Add stations layer to map
+            if (!map.hasLayer(stationsLayer)) {
+              stationsLayer.addTo(map);
+            }
+            
+            // Fit map to show all stations if we have coordinates
+            if (allCoords.length > 0) {
+              const bounds = L.latLngBounds(allCoords);
+              map.fitBounds(bounds.pad(0.1));
+            }
+          }
+          
+          if (pathRoutes.length > 0) {
+            // Store original trip results globally for filtering
+            originalPathRoutes = pathRoutes;
+            filteredPathRoutes = pathRoutes; // Initially show all results
+            currentFilterStation = null; // Reset any previous filter
+            filterStationsStack = []; // Reset filter stack for new trip planning
+            
+            // Automatically display all stations from all routes on the map
+            plotAllTripStationsOnMap(pathRoutes, null); // No route selected initially
+            
+            // Stop the train animation if it exists
+            const existingTrain = document.querySelector('.train');
+            if (existingTrain) {
+              existingTrain.classList.add('stopped');
+            }
+            
+            // Keep the train container and append results below it
+            const existingTrainContainer = document.querySelector('.train-container');
+            if (existingTrainContainer) {
+              // Remove only the planning status text, keep the train container
+              const statusText = planStatus.querySelector('.planning-status-text');
+              if (statusText) statusText.remove();
+            } else {
+              // If no train container exists, clear everything
+              planStatus.innerHTML = '';
+            }
+            
+            const statusDiv = document.createElement('div');
+            statusDiv.style.cssText = 'text-align: left; font-size: 16px; line-height: 1.6;';
+            
+            // Pagination variables
+            let currentPage = 0;
+            const pathsPerPage = 3;
+            
+            // Function to calculate total pages based on current results
+            function getTotalPages() {
+              const currentResults = filteredPathRoutes || originalPathRoutes || pathRoutes;
+              return Math.ceil(currentResults.length / pathsPerPage);
+            }
+            
+            const totalPages = getTotalPages();
+            
+            const instructionContainer = document.createElement('div');
+            instructionContainer.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;';
+            
+            const instructionText = document.createElement('div');
+            instructionText.style.cssText = 'color: var(--muted); font-size: 14px; font-style: italic;';
+            
+            const paginationContainer = document.createElement('div');
+            paginationContainer.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+            
+            const paginationInfo = document.createElement('div');
+            paginationInfo.style.cssText = 'font-weight: 600; color: var(--muted); font-size: 14px;';
+            
+            // Update pagination info function
+            function updatePaginationInfo() {
+              const currentResults = filteredPathRoutes || originalPathRoutes || pathRoutes;
+              const startIndex = currentPage * pathsPerPage + 1;
+              const endIndex = Math.min((currentPage + 1) * pathsPerPage, currentResults.length);
+              paginationInfo.textContent = `${startIndex}-${endIndex}/${currentResults.length}`;
+            }
+            
+            updatePaginationInfo();
+            paginationContainer.appendChild(paginationInfo);
+            
+            // Add navigation arrows if needed
+            if (totalPages > 1) {
+              const prevButton = document.createElement('button');
+              prevButton.innerHTML = '←';
+              prevButton.style.cssText = 'background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; cursor: pointer; color: var(--text); font-size: 12px;';
+              
+              const nextButton = document.createElement('button');
+              nextButton.innerHTML = '→';
+              nextButton.style.cssText = 'background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; cursor: pointer; color: var(--text); font-size: 12px;';
+              
+              paginationContainer.appendChild(prevButton);
+              paginationContainer.appendChild(nextButton);
+            }
+            
+            instructionContainer.appendChild(instructionText);
+            instructionContainer.appendChild(paginationContainer);
+            statusDiv.appendChild(instructionContainer);
+            
+            const pathsList = document.createElement('div');
+            pathsList.style.cssText = 'margin: 0; color: var(--text); display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;';
+            
+            // Function to render paths for current page
+            function renderPathsForPage() {
+              pathsList.innerHTML = '';
+              const currentResults = filteredPathRoutes || originalPathRoutes || pathRoutes;
+              const startIndex = currentPage * pathsPerPage;
+              const endIndex = Math.min(startIndex + pathsPerPage, currentResults.length);
+              
+              for (let i = startIndex; i < endIndex; i++) {
+                const route = currentResults[i];
+                const index = i;
+                
+                const pathDiv = document.createElement('div');
+                pathDiv.style.cssText = 'margin-bottom: 16px; padding: 12px; border-radius: 8px; background: color-mix(in srgb, var(--card) 95%, var(--bg)); cursor: pointer; transition: background-color 0.2s, box-shadow 0.2s; border: 2px solid transparent;';
+                
+                // Add hover and click styling
+                pathDiv.addEventListener('mouseenter', () => {
+                  pathDiv.style.background = 'color-mix(in srgb, var(--card) 90%, var(--bg))';
+                  pathDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                });
+                pathDiv.addEventListener('mouseleave', () => {
+                  pathDiv.style.background = 'color-mix(in srgb, var(--card) 95%, var(--bg))';
+                  pathDiv.style.boxShadow = 'none';
+                });
+                
+                // Add click handler to plot the path
+                pathDiv.addEventListener('click', () => {
+                  plotPathOnMap(route);
+                  currentlySelectedRoute = route; // Track currently selected route
+                  
+                  // Update station display with proper styling for selected path
+                  const currentResults = filteredPathRoutes || originalPathRoutes || [];
+                  if (currentResults.length > 0) {
+                    plotAllTripStationsOnMap(currentResults, currentlySelectedRoute);
+                  }
+                  
+                  // Update visual feedback for selected path
+                  document.querySelectorAll('[data-path-div]').forEach(div => {
+                    div.style.borderColor = 'transparent';
+                  });
+                  pathDiv.style.borderColor = route.pathColor;
+                });
+                pathDiv.setAttribute('data-path-div', 'true');
+                
+                const pathLabel = document.createElement('div');
+                pathLabel.style.cssText = 'font-weight: 600; margin-bottom: 8px; font-size: 14px;';
+                pathLabel.style.color = route.pathColor;
+                pathLabel.textContent = `Path ${index + 1}:`;
+                pathDiv.appendChild(pathLabel);
+                
+                const pathText = document.createElement('div');
+                pathText.style.cssText = 'font-size: 15px; line-height: 1.6;';
+                
+                // Create tree structure display with selective time information
+                const createTreeStructure = () => {
+                  const treeContainer = document.createElement('div');
+                  treeContainer.style.cssText = 'font-family: monospace; line-height: 1.8; margin-left: 8px;';
+                  
+                  route.pathStations.forEach((station, stationIndex) => {
+                    const stationDiv = document.createElement('div');
+                    stationDiv.style.cssText = 'display: flex; align-items: center; font-size: 14px;';
+                    
+                    // Create tree connector visual
+                    const connector = document.createElement('span');
+                    connector.style.cssText = 'color: var(--muted); margin-right: 8px; font-weight: 600;';
+                    
+                    if (stationIndex === 0) {
+                      connector.textContent = '├─';
+                      connector.style.color = '#007bff'; // Blue for start
+                    } else if (stationIndex === route.pathStations.length - 1) {
+                      connector.textContent = '└─';
+                      connector.style.color = '#ff8c00'; // Orange for end
+                    } else {
+                      connector.textContent = '├─';
+                      connector.style.color = '#6f42c1'; // Purple for intermediate
+                    }
+                    
+                    // Create station name element with index
+                    const stationName = document.createElement('span');
+                    stationName.style.cssText = 'font-weight: 600; color: var(--text);';
+                    stationName.textContent = `${stationIndex + 1}. ${station.name}`;
+                    
+                    // Station code removed as per requirements
+                    
+                    // Time information removed as per requirements
+                    
+                    stationDiv.appendChild(connector);
+                    stationDiv.appendChild(stationName);
+                    treeContainer.appendChild(stationDiv);
+                    
+                    // Add vertical connector line with travel time for non-last stations
+                    if (stationIndex < route.pathStations.length - 1) {
+                      const verticalLine = document.createElement('div');
+                      verticalLine.style.cssText = 'color: var(--muted); margin-left: 6px; font-weight: 600; display: flex; align-items: center; gap: 8px;';
+                      
+                      // Add travel time if available
+                      let travelTimeText = '';
+                      if (route.timeSchedule && route.timeSchedule.length >= 2) {
+                        const currentTimeIndex = stationIndex === 0 ? 0 : stationIndex * 2;
+                        const nextTimeIndex = currentTimeIndex + 1;
+                        
+                        if (route.timeSchedule[currentTimeIndex] && route.timeSchedule[nextTimeIndex]) {
+                          const travelTime = calculateTravelTime(
+                            route.timeSchedule[currentTimeIndex], 
+                            route.timeSchedule[nextTimeIndex]
+                          );
+                          travelTimeText = travelTime ? ` (${travelTime})` : '';
+                        }
+                      }
+                      
+                      verticalLine.textContent = `│${travelTimeText}`;
+                      treeContainer.appendChild(verticalLine);
+                    }
+                  });
+                  
+                  return treeContainer;
+                };
+                
+                pathText.appendChild(createTreeStructure());
+                
+                pathDiv.appendChild(pathText);
+                pathsList.appendChild(pathDiv);
+              }
+            }
+            
+            // Add event listeners for navigation buttons
+            if (totalPages > 1) {
+              const prevButton = paginationContainer.children[1]; // Second child after paginationInfo
+              const nextButton = paginationContainer.children[2]; // Third child
+              
+              function updateButtonStates() {
+                const currentTotalPages = getTotalPages();
+                prevButton.disabled = currentPage === 0;
+                nextButton.disabled = currentPage === currentTotalPages - 1;
+                prevButton.style.opacity = prevButton.disabled ? '0.5' : '1';
+                nextButton.style.opacity = nextButton.disabled ? '0.5' : '1';
+                prevButton.style.cursor = prevButton.disabled ? 'not-allowed' : 'pointer';
+                nextButton.style.cursor = nextButton.disabled ? 'not-allowed' : 'pointer';
+              }
+              
+              prevButton.addEventListener('click', () => {
+                if (currentPage > 0) {
+                  currentPage--;
+                  updatePaginationInfo();
+                  updateButtonStates();
+                  renderPathsForPage();
+                }
+              });
+              
+              nextButton.addEventListener('click', () => {
+                if (currentPage < getTotalPages() - 1) {
+                  currentPage++;
+                  updatePaginationInfo();
+                  updateButtonStates();
+                  renderPathsForPage();
+                }
+              });
+              
+              updateButtonStates();
+            }
+            
+            // Global array to track removed stations
+            let removedStations = [];
+            
+            // Function to remove station from map and filter paths to exclude it
+            window.removeStationFromMap = function(stationCode) {
+              // Find the station object
+              const stationToRemove = stations.find(s => s.code === stationCode);
+              if (!stationToRemove) return;
+              
+              // Add to removed stations if not already there
+              if (!removedStations.some(s => s.code === stationCode)) {
+                removedStations.push(stationToRemove);
+              }
+              
+              // Remove from filter stack if it exists there
+              filterStationsStack = filterStationsStack.filter(s => s.code !== stationCode);
+              
+              // Re-filter paths to exclude removed stations
+              if (originalPathRoutes) {
+                // Filter out paths that contain any removed stations
+                filteredPathRoutes = originalPathRoutes.filter(route => {
+                  // Check if route contains any removed stations
+                  const containsRemovedStation = removedStations.some(removedStation => {
+                    return route.pathArray.includes(removedStation.code) ||
+                           route.pathStations.some(station => station.code === removedStation.code);
+                  });
+                  
+                  // Only include routes that don't contain removed stations
+                  if (containsRemovedStation) return false;
+                  
+                  // If we have active filters, also check those
+                  if (filterStationsStack.length > 0) {
+                    return filterStationsStack.every(filterStn => {
+                      return route.pathArray.includes(filterStn.code) ||
+                             route.pathStations.some(station => station.code === filterStn.code);
+                    });
+                  }
+                  
+                  return true;
+                });
+                
+                // Update the results display
+                updateResultsDisplay();
+                
+                // Update station display
+                if (filteredPathRoutes && filteredPathRoutes.length > 0) {
+                  plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
+                } else if (originalPathRoutes) {
+                  plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
+                }
+              }
+            };
+            
+            // Function to restore a removed station
+            window.restoreRemovedStation = function(stationCode) {
+              removedStations = removedStations.filter(s => s.code !== stationCode);
+              
+              // Re-apply filtering without the removed station
+              if (originalPathRoutes) {
+                if (filterStationsStack.length === 0 && removedStations.length === 0) {
+                  filteredPathRoutes = originalPathRoutes;
+                } else {
+                  filteredPathRoutes = originalPathRoutes.filter(route => {
+                    // Check if route contains any removed stations
+                    const containsRemovedStation = removedStations.some(removedStation => {
+                      return route.pathArray.includes(removedStation.code) ||
+                             route.pathStations.some(station => station.code === removedStation.code);
+                    });
+                    
+                    if (containsRemovedStation) return false;
+                    
+                    // If we have active filters, also check those
+                    if (filterStationsStack.length > 0) {
+                      return filterStationsStack.every(filterStn => {
+                        return route.pathArray.includes(filterStn.code) ||
+                               route.pathStations.some(station => station.code === filterStn.code);
+                      });
+                    }
+                    
+                    return true;
+                  });
+                }
+                
+                updateResultsDisplay();
+                
+                if (filteredPathRoutes && filteredPathRoutes.length > 0) {
+                  plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
+                } else if (originalPathRoutes) {
+                  plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
+                }
+              }
+            };
+
+            // Function to filter results by clicked station (cumulative filtering)
+            window.filterResultsByStation = function(filterStation) {
+              if (!originalPathRoutes) return;
+              
+              // Check if station is already in the filter stack
+              const existingIndex = filterStationsStack.findIndex(s => s.code === filterStation.code);
+              
+              if (existingIndex >= 0) {
+                // Station already selected, remove it and all stations added after it
+                filterStationsStack = filterStationsStack.slice(0, existingIndex);
+              } else {
+                // Add new station to the filter stack
+                filterStationsStack.push(filterStation);
+              }
+              
+              // Apply cumulative filtering - paths must contain ALL stations in the stack AND exclude removed stations
+              if (filterStationsStack.length === 0 && removedStations.length === 0) {
+                filteredPathRoutes = originalPathRoutes;
+                currentFilterStation = null;
+              } else {
+                filteredPathRoutes = originalPathRoutes.filter(route => {
+                  // First check if route contains any removed stations
+                  const containsRemovedStation = removedStations.some(removedStation => {
+                    return route.pathArray.includes(removedStation.code) ||
+                           route.pathStations.some(station => station.code === removedStation.code);
+                  });
+                  
+                  if (containsRemovedStation) return false;
+                  
+                  // Then check if route contains all required filter stations
+                  if (filterStationsStack.length > 0) {
+                    return filterStationsStack.every(filterStn => {
+                      return route.pathArray.includes(filterStn.code) ||
+                             route.pathStations.some(station => station.code === filterStn.code);
+                    });
+                  }
+                  
+                  return true;
+                });
+                currentFilterStation = filterStationsStack[filterStationsStack.length - 1];
+              }
+              
+              // Update the results display with filtered data and refresh station display
+              updateResultsDisplay();
+              
+              // Update station display to show only stations from filtered paths
+              if (filteredPathRoutes && filteredPathRoutes.length > 0) {
+                plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
+              } else if (originalPathRoutes) {
+                plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
+              }
+            };
+            
+            // Function to update the results display with current filtered data
+            function updateResultsDisplay() {
+              const currentResults = filteredPathRoutes || originalPathRoutes || [];
+              
+              // Update pagination
+              currentPage = 0; // Reset to first page when filtering
+              const newTotalPages = Math.ceil(currentResults.length / pathsPerPage);
+              
+              // Update instruction text and button based on filter state
+              instructionText.innerHTML = '';
+              
+              // Show removed stations if any
+              if (removedStations.length > 0) {
+                const removedInfo = document.createElement('div');
+                removedInfo.style.cssText = 'margin-bottom: 10px; padding: 8px; background: #f8f9fa; border-left: 3px solid #dc3545; border-radius: 3px;';
+                
+                const removedTitle = document.createElement('strong');
+                removedTitle.textContent = 'Skipped: ';
+                removedTitle.style.color = '#dc3545';
+                removedInfo.appendChild(removedTitle);
+                
+                removedStations.forEach((station, index) => {
+                  if (index > 0) {
+                    removedInfo.appendChild(document.createTextNode(', '));
+                  }
+                  
+                  const stationLink = document.createElement('button');
+                  stationLink.textContent = station.name;
+                  stationLink.style.cssText = 'background: none; border: none; color: #dc3545; text-decoration: underline; cursor: pointer; font-size: 14px; padding: 0; margin: 0;';
+                  stationLink.title = 'Click to restore this station';
+                  
+                  stationLink.addEventListener('click', () => {
+                    restoreRemovedStation(station.code);
+                  });
+                  
+                  removedInfo.appendChild(stationLink);
+                });
+                
+                instructionText.appendChild(removedInfo);
+              }
+              
+              if (filterStationsStack.length > 0) {
+                // Create filter info display similar to removed stations
+                const filterInfo = document.createElement('div');
+                filterInfo.style.cssText = 'margin-bottom: 10px; padding: 8px; background: #f8f9fa; border-left: 3px solid #007bff; border-radius: 3px;';
+                
+                const filterTitle = document.createElement('strong');
+                filterTitle.textContent = 'Via: ';
+                filterTitle.style.color = '#007bff';
+                filterInfo.appendChild(filterTitle);
+                
+                filterStationsStack.forEach((station, index) => {
+                  if (index > 0) {
+                    filterInfo.appendChild(document.createTextNode(', '));
+                  }
+                  
+                  const stationLink = document.createElement('button');
+                  stationLink.textContent = station.name;
+                  stationLink.style.cssText = 'background: none; border: none; color: #007bff; text-decoration: underline; cursor: pointer; font-size: 14px; padding: 0; margin: 0;';
+                  stationLink.title = 'Click to remove this station from selection';
+                  
+                  stationLink.addEventListener('click', () => {
+                    // Remove only this specific station from the filter stack
+                    const stationIndex = filterStationsStack.findIndex(s => s.code === station.code);
+                    if (stationIndex >= 0) {
+                      // Remove only this station, keep others
+                      filterStationsStack.splice(stationIndex, 1);
+                      
+                      // Re-apply filtering with remaining stations
+                      if (filterStationsStack.length === 0 && removedStations.length === 0) {
+                        filteredPathRoutes = originalPathRoutes;
+                        currentFilterStation = null;
+                      } else {
+                        filteredPathRoutes = originalPathRoutes.filter(route => {
+                          // First check if route contains any removed stations
+                          const containsRemovedStation = removedStations.some(removedStation => {
+                            return route.pathArray.includes(removedStation.code) ||
+                                   route.pathStations.some(station => station.code === removedStation.code);
+                          });
+                          
+                          if (containsRemovedStation) return false;
+                          
+                          // Then check if route contains all required filter stations
+                          if (filterStationsStack.length > 0) {
+                            return filterStationsStack.every(filterStn => {
+                              return route.pathArray.includes(filterStn.code) ||
+                                     route.pathStations.some(station => station.code === filterStn.code);
+                            });
+                          }
+                          
+                          return true;
+                        });
+                        currentFilterStation = filterStationsStack[filterStationsStack.length - 1];
+                      }
+                      
+                      // Update display and refresh stations
+                      updateResultsDisplay();
+                      if (filteredPathRoutes && filteredPathRoutes.length > 0) {
+                        plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
+                      } else if (originalPathRoutes) {
+                        plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
+                      }
+                    }
+                  });
+                  
+                  filterInfo.appendChild(stationLink);
+                });
+                
+                instructionText.appendChild(filterInfo);
+              }
+              
+              // Re-render paths with updated data
+              renderPathsForPage();
+              updatePaginationInfo();
+              
+              // Update button states if pagination exists
+              if (typeof updateButtonStates === 'function') {
+                updateButtonStates();
+              }
+              
+              // Auto-render the first path always
+              if (currentResults.length > 0) {
+                plotPathOnMap(currentResults[0]);
+                currentlySelectedRoute = currentResults[0]; // Set the selected route
+                
+                // Update station display with proper styling for selected path
+                if (filteredPathRoutes && filteredPathRoutes.length > 0) {
+                  plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
+                } else if (originalPathRoutes) {
+                  plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
+                }
+                
+                // Update visual feedback for the auto-selected path
+                setTimeout(() => {
+                  const firstPathDiv = document.querySelector('[data-path-div]');
+                  if (firstPathDiv) {
+                    // Clear all path borders first
+                    document.querySelectorAll('[data-path-div]').forEach(div => {
+                      div.style.borderColor = 'transparent';
+                    });
+                    // Highlight the first path
+                    firstPathDiv.style.borderColor = currentResults[0].pathColor;
+                  }
+                }, 100);
+              }
+            }
+            
+            // Initial render
+            renderPathsForPage();
+            
+            // Auto-plot the first path on initial load
+            if (pathRoutes.length > 0) {
+              setTimeout(() => {
+                plotPathOnMap(pathRoutes[0]);
+                currentlySelectedRoute = pathRoutes[0]; // Set the selected route
+                
+                // Update station display with proper styling for selected path
+                plotAllTripStationsOnMap(pathRoutes, currentlySelectedRoute);
+                
+                // Update visual feedback for the auto-selected path
+                const firstPathDiv = document.querySelector('[data-path-div]');
+                if (firstPathDiv) {
+                  firstPathDiv.style.borderColor = pathRoutes[0].pathColor;
+                }
+              }, 100);
+            }
+            
+            statusDiv.appendChild(pathsList);
+            planStatus.appendChild(statusDiv);
+            
+            // Adjust map height to match results pane after content is added
+            setTimeout(adjustMapHeight, 100);
+          } else {
+            // Stop the train animation if it exists
+            const existingTrain = document.querySelector('.train');
+            if (existingTrain) {
+              existingTrain.classList.add('stopped');
+            }
+            
+            // Keep the train container and show message below it
+            const existingTrainContainer = document.querySelector('.train-container');
+            if (existingTrainContainer) {
+              // Remove only the planning status text, keep the train container
+              const statusText = planStatus.querySelector('.planning-status-text');
+              if (statusText) statusText.remove();
+              
+              const noResultsDiv = document.createElement('div');
+              noResultsDiv.style.cssText = 'margin-top: 16px; text-align: center; color: var(--muted); font-size: 16px;';
+              noResultsDiv.textContent = 'No suggestions found for that day.';
+              planStatus.appendChild(noResultsDiv);
+              
+              // Adjust map height to match results pane after content is added
+              setTimeout(adjustMapHeight, 100);
+            } else {
+              planStatus.textContent = 'No suggestions found for that day.';
+            }
+          }
+        } catch (err) {
+          // Stop the train animation if it exists
+          const existingTrain = document.querySelector('.train');
+          if (existingTrain) {
+            existingTrain.classList.add('stopped');
+          }
+          
+          // Keep the train container and show error message below it
+          const existingTrainContainer = document.querySelector('.train-container');
+          if (existingTrainContainer) {
+            // Remove only the planning status text, keep the train container
+            const statusText = planStatus.querySelector('.planning-status-text');
+            if (statusText) statusText.remove();
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = 'margin-top: 16px; text-align: center; color: var(--danger); font-size: 16px;';
+            errorDiv.textContent = 'Unable to plan trip. Please try again later.';
+            planStatus.appendChild(errorDiv);
+            
+            // Adjust map height to match results pane after content is added
+            setTimeout(adjustMapHeight, 100);
+          } else {
+            planStatus.textContent = 'Unable to plan trip. Please try again later.';
+          }
+          
+          // Security: Log detailed error internally but show generic message to user
+          console.error('Trip planning error:', err.message || err);
+        } finally {
+          planBtn.disabled = false;
+        }
+      }
+
+      if (planBtn) planBtn.addEventListener('click', runPlanTrip);
+
+      // Set default stations after all initialization is complete
+      fromInput.value = 'Amsterdam Centraal';
+      onChange(); // Trigger initial map display
+
+      // If both empty, center NL
+      map.setView([52.1, 5.3], 8);
+    })();
+  </script>
+</body>
+</html>
