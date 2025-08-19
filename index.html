@@ -1352,6 +1352,28 @@
             function renderPathsForPage() {
               pathsList.innerHTML = '';
               const currentResults = filteredPathRoutes || originalPathRoutes || pathRoutes;
+              
+              // Check if no results after filtering
+              if (currentResults.length === 0 && (filterStationsStack.length > 0 || removedStations.length > 0)) {
+                // Clear map layers
+                try { plannedLayer.clearLayers(); } catch (_) { /* ignore */ }
+                try { pathLayer.clearLayers(); } catch (_) { /* ignore */ }
+                try { stationsLayer.clearLayers(); } catch (_) { /* ignore */ }
+                
+                // Hide pagination when no results
+                paginationContainer.style.display = 'none';
+                
+                // Display "No trips found" message
+                const noResultsDiv = document.createElement('div');
+                noResultsDiv.style.cssText = 'text-align: center; padding: 40px 20px; color: var(--muted); font-size: 18px; font-weight: 600; grid-column: 1 / -1;';
+                noResultsDiv.textContent = 'No trips found';
+                pathsList.appendChild(noResultsDiv);
+                return;
+              }
+              
+              // Show pagination when there are results
+              paginationContainer.style.display = 'flex';
+              
               const startIndex = currentPage * pathsPerPage;
               const endIndex = Math.min(startIndex + pathsPerPage, currentResults.length);
               
