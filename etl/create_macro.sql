@@ -65,7 +65,7 @@ planning AS (
             AND time_bucket(INTERVAL '15 minutes', planning.arrival_time_tb + INTERVAL  (input_layover_time) HOUR) = time_bucket(INTERVAL '15 minutes', ts.departure_time_tb)
     WHERE
         (
-        list_position(municipalities, ts.to_municipality_sk) IS NULL
+        ( list_position(municipalities, ts.to_municipality_sk) IS NULL AND ts.to_municipality_sk != input_to_municipality_sk)
         OR (
             ts.to_station_code = input_to_station_code
             AND hour(ts.arrival_time_tb) = input_hour_arrival
