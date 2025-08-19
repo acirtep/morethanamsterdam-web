@@ -44,6 +44,9 @@ body {
 .brand span { font-size: 20px; }
 .top-links a { color: var(--muted); text-decoration: none; font-weight: 600; border: 1px solid var(--border); padding: 6px 10px; border-radius: 8px; }
 .top-links a:hover { color: var(--text); border-color: var(--text); }
+.top-links a svg { border: none; padding: 0; }
+.top-links a:has(svg) { border: none; padding: 6px; }
+.top-links a:has(svg):hover { border: none; }
 
 h1 {
   text-align: center;
