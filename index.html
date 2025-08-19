@@ -112,97 +112,16 @@
 
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script>
-    // Security: Enhanced CSV parser with validation
-    function parseCSV(text) {
-      // Security: Validate input
-      if (!text || typeof text !== 'string') {
-        throw new Error('Invalid CSV input');
-      }
-      
-      // Security: Limit file size to prevent DoS
-      if (text.length > 1000000) { // 1MB limit
-        throw new Error('CSV file too large');
-      }
-      
-      // remove potential BOM
-      if (text.charCodeAt(0) === 0xFEFF) {
-        text = text.slice(1);
-      }
-      
-      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-      
-      // Security: Validate minimum structure
-      if (lines.length < 2) {
-        throw new Error('Invalid CSV structure');
-      }
-      
-      const header = lines.shift().split(',');
-      
-      // Security: Validate expected headers
-      const requiredHeaders = ['station_name', 'lon', 'lat', 'station_code', 'municipality_sk'];
-      const hasAllHeaders = requiredHeaders.every(h => header.includes(h));
-      if (!hasAllHeaders) {
-        throw new Error('CSV missing required headers');
-      }
-      
-      // Expect: station_id,station_name,station_code,lon,lat
-      const idx = {
-        station_code: header.indexOf('station_code'),
-        station_name: header.indexOf('station_name'),
-        lat: header.indexOf('lat'),
-        lon: header.indexOf('lon'),
-        municipality_sk: header.indexOf('municipality_sk')
-      };
-      
-      return lines.map((line, lineNum) => {
-        // Security: Basic CSV injection protection
-        if (line.startsWith('=') || line.startsWith('+') || line.startsWith('-') || line.startsWith('@')) {
-          console.warn(`Potential CSV injection attempt at line ${lineNum + 2}`);
-          return null;
-        }
-        
-        const parts = line.split(',');
-        
-        // Security: Validate field count
-        if (parts.length !== header.length) {
-          console.warn(`Invalid field count at line ${lineNum + 2}`);
-          return null;
-        }
-        
-        const name = parts[idx.station_name]?.trim();
-        const code = parts[idx.station_code]?.trim();
-        const lon = parseFloat(parts[idx.lon]);
-        const lat = parseFloat(parts[idx.lat]);
-        const municipalitySk = parts[idx.municipality_sk]?.trim();
-        
-        // Security: Enhanced validation
-        if (!name || name.length > 100 || Number.isNaN(lat) || Number.isNaN(lon)) {
-          return null;
-        }
-        
-        // Security: Validate coordinate ranges (Netherlands bounds)
-        if (lat < 50.0 || lat > 54.0 || lon < 3.0 || lon > 8.0) {
-          console.warn(`Coordinates out of Netherlands bounds at line ${lineNum + 2}`);
-          return null;
-        }
-        
-        // Security: Sanitize station name and municipality
-        const sanitizedName = name.replace(/[<>'"&]/g, '');
-        const sanitizedCode = code ? code.replace(/[<>'"&]/g, '') : '';
-        const sanitizedMunicipality = municipalitySk ? municipalitySk.replace(/[<>'"&]/g, '') : '';
-        
-        return { name: sanitizedName, code: sanitizedCode, lat, lon, municipalitySk: sanitizedMunicipality };
-      }).filter(Boolean);
-    }
+  <script type="module">
+    // Import data handling functions following Dependency Inversion Principle
+    import { 
+      loadStations, 
+      dayNameToIsoDow,
+      validateStationInput,
+      executeTripQuery
+    } from './src/data.js';
 
-
-    async function loadStations() {
-      const res = await fetch('data/train_stations.csv');
-      if (!res.ok) throw new Error('Failed to load train_stations.csv');
-      const text = await res.text();
-      return parseCSV(text);
-    }
+    // UI and map functionality remains in index.html following Single Responsibility Principle
 
 
     function populateStationSelects(stations) {
@@ -425,11 +344,6 @@
         return marker;
       }
 
-      function drawLine(a, b) {
-        if (line) map.removeLayer(line);
-        line = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: '#007bff', weight: 3, opacity: 0.8 }).addTo(map);
-      }
-
       // Map-selection helpers
       const stationsLayer = L.layerGroup();
       const plannedLayer = L.layerGroup();
@@ -508,18 +422,6 @@
         mapSelectTarget = null;
       }
 
-      // Function to show all stations on the map
-      function showAllStations() {
-        buildAllStationMarkers();
-        stationsLayer.clearLayers();
-        allStationMarkers.forEach(m => m.addTo(stationsLayer));
-        stationsLayer.addTo(map);
-        try {
-          const b = boundsForPoints(stations);
-          map.fitBounds(b.pad(0.1));
-        } catch (e) { /* ignore */ }
-      }
-
       // Function to hide all stations from the map
       function hideAllStations() {
         if (map.hasLayer(stationsLayer)) map.removeLayer(stationsLayer);
@@ -589,153 +491,6 @@
       // Initially disable the plan button until both stations are selected
       planBtn.disabled = true;
 
-
-      // DuckDB-Wasm setup for Plan Trip
-      let duckdbConn = null;
-      let duckdbDb = null;
-      let duckdbReady = false;
-      let sqlTextCache = null;
-      let macroSqlCache = null;
-      let macroExecuted = false;
-      let servicesRegistered = false;
-
-      async function ensureDuckDB() {
-        if (duckdbReady) return;
-        
-        // Security: Use specific version with integrity verification
-        const DUCKDB_VERSION = '1.29.1-dev269.0';
-        const duckdb = await import(`https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`);
-        const bundles = duckdb.getJsDelivrBundles();
-        const bundle = await duckdb.selectBundle(bundles);
-
-        // Security: Validate URLs are from trusted CDN
-        function validateWorkerUrl(url) {
-          try {
-            const urlObj = new URL(url);
-            if (!urlObj.hostname.includes('cdn.jsdelivr.net')) {
-              throw new Error(`Untrusted worker URL: ${url}`);
-            }
-            return true;
-          } catch (e) {
-            throw new Error(`Invalid worker URL: ${url}`);
-          }
-        }
-
-        // Create a same-origin Blob URL for the worker with security validation
-        async function makeBlobWorker(url) {
-          validateWorkerUrl(url);
-          const resp = await fetch(url);
-          if (!resp.ok) throw new Error(`Failed to fetch worker: ${url} (${resp.status})`);
-          
-          // Security: Validate content type
-          const contentType = resp.headers.get('content-type');
-          if (!contentType || !contentType.includes('javascript')) {
-            throw new Error(`Invalid content type for worker: ${contentType}`);
-          }
-          
-          const code = await resp.text();
-          
-          // Security: Basic validation of worker code structure
-          if (!code.includes('self.onmessage') && !code.includes('addEventListener')) {
-            throw new Error('Worker code does not appear to be a valid web worker');
-          }
-          
-          const blob = new Blob([code], { type: 'text/javascript' });
-          const blobUrl = URL.createObjectURL(blob);
-          return new Worker(blobUrl);
-        }
-
-        // Security: Remove fallback to direct URL to prevent bypass
-        const worker = await makeBlobWorker(bundle.mainWorker);
-
-        const logger = new duckdb.ConsoleLogger();
-        duckdbDb = new duckdb.AsyncDuckDB(logger, worker);
-
-        // If pthreadWorker exists, also convert it to a blob URL with validation
-        let pthreadUrl = null;
-        if (bundle.pthreadWorker) {
-          validateWorkerUrl(bundle.pthreadWorker);
-          const resp = await fetch(bundle.pthreadWorker);
-          if (resp.ok) {
-            const contentType = resp.headers.get('content-type');
-            if (contentType && contentType.includes('javascript')) {
-              const code = await resp.text();
-              if (code.includes('self.onmessage') || code.includes('addEventListener')) {
-                pthreadUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
-              } else {
-                throw new Error('Pthread worker code validation failed');
-              }
-            } else {
-              throw new Error('Invalid pthread worker content type');
-            }
-          } else {
-            throw new Error(`Failed to fetch pthread worker: ${resp.status}`);
-          }
-        }
-
-        await duckdbDb.instantiate(bundle.mainModule, pthreadUrl);
-        duckdbConn = await duckdbDb.connect();
-        duckdbReady = true;
-      }
-
-      async function ensureServicesFileRegistered(dayOfWeek) {
-        // Security: Validate day of week parameter
-        if (!Number.isInteger(dayOfWeek) || dayOfWeek < 1 || dayOfWeek > 7) {
-          throw new Error('Invalid day of week parameter');
-        }
-        
-        const registrationKey = `services_dow_${dayOfWeek}`;
-        if (servicesRegistered === registrationKey) return;
-        
-        // Register only the parquet file for the specific day of week
-        const filePath = `./data/train_services.parquet/day_of_week=${dayOfWeek}/data_0.parquet`;
-        const resp = await fetch(filePath);
-        if (!resp.ok) throw new Error(`Failed to fetch ${filePath}`);
-        const buf = new Uint8Array(await resp.arrayBuffer());
-        await duckdbDb.registerFileBuffer(filePath, buf);
-        
-        servicesRegistered = registrationKey;
-      }
-
-      async function ensureMacroExecuted() {
-        if (macroExecuted) return;
-        
-        if (!macroSqlCache) {
-          const macroResp = await fetch('etl/create_macro.sql');
-          if (!macroResp.ok) throw new Error('Failed to load etl/create_macro.sql');
-          macroSqlCache = await macroResp.text();
-        }
-        
-        // Execute the macro creation SQL
-        await duckdbConn.query(macroSqlCache);
-        macroExecuted = true;
-      }
-
-      // Security: Validate and sanitize day of week input
-      function dayNameToIsoDow(name) {
-        const validDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-        const sanitizedName = String(name || '').trim();
-        const idx = validDays.indexOf(sanitizedName);
-        if (idx < 0) {
-          console.warn(`Invalid day name: ${sanitizedName}, defaulting to Monday`);
-          return 1; // Default to Monday
-        }
-        return idx + 1; // Monday=1..Sunday=7
-      }
-      
-      // Security: Validate station input
-      function validateStationInput(input) {
-        if (!input || typeof input !== 'string') return '';
-        const sanitized = input.trim();
-        // Limit length to prevent potential buffer overflow attacks
-        if (sanitized.length > 100) {
-          console.warn('Station name too long, truncating');
-          return sanitized.substring(0, 100);
-        }
-        // Remove potentially dangerous characters
-        return sanitized.replace(/[<>'"&]/g, '');
-      }
-
       async function runPlanTrip() {
         try {
           planBtn.disabled = true; 
@@ -779,27 +534,8 @@
           
           planStatus.appendChild(trainContainer);
           planStatus.appendChild(statusText);
-          await ensureDuckDB();
-          await ensureMacroExecuted();
-          
           // Extract and validate day of week parameter first
           const dow = dayNameToIsoDow(dayOfWeek.value);
-          await ensureServicesFileRegistered(dow);
-          
-          // Use the macro defined in create_macro.sql instead of external SQL file
-          sqlTextCache = `
-            SELECT * FROM get_trips(
-              :input_day_of_week,
-              :input_station_code,
-              :input_hour_departure,
-              :input_minute_departure,
-              :input_to_station_code,
-              :input_hour_arrival,
-              :input_minute_arrival,
-              :input_layover_time,
-              :input_to_municipality_sk
-            )
-          `;
           
           // Get station code from fromStation selection
           const fromStationName = validateStationInput(fromInput.value);
@@ -856,86 +592,18 @@
             throw new Error('Invalid layover time');
           }
 
-          let result;
-          
-          // Timeout wrapper function for queries
-          const executeQueryWithTimeout = async (queryPromise, timeoutMs = 15000) => {
-            return new Promise((resolve, reject) => {
-              const timeoutId = setTimeout(() => {
-                reject(new Error('unable to plan trip, increase the layover time'));
-              }, timeoutMs);
-              
-              queryPromise
-                .then(resolve)
-                .catch(reject)
-                .finally(() => clearTimeout(timeoutId));
-            });
-          };
-          
-          try {
-            // Try parameterized queries first (preferred method) with timeout
-            const stmt = await duckdbConn.prepare(sqlTextCache);
-            const queryPromise = stmt.query({ 
-              input_day_of_week: dow,
-              input_station_code: stationCode,
-              input_hour_departure: hourDeparture,
-              input_minute_departure: minuteDeparture,
-              input_hour_arrival: hourArrival,
-              input_minute_arrival: minuteArrival,
-              input_to_station_code: toStation.code,
-              input_layover_time: layoverTime,
-              input_to_municipality_sk: toMunicipalitySk
-            });
-            result = await executeQueryWithTimeout(queryPromise);
-            await stmt.close();
-          } catch (e) {
-            // Check if this is a timeout error
-            if (e.message === 'Unable to plan trip, increase the layover time') {
-              throw e; // Re-throw timeout error directly
-            }
-            
-            // Security: Safe fallback with strict validation for controlled inputs
-            if (!Number.isInteger(dow) || dow < 1 || dow > 7) {
-              throw new Error('Invalid day of week parameter');
-            }
-            if (!stationCode || typeof stationCode !== 'string' || stationCode.length > 10) {
-              throw new Error('Invalid station code parameter');
-            }
-            if (!toStation.code || typeof toStation.code !== 'string' || toStation.code.length > 10) {
-              throw new Error('Invalid destination station code parameter');
-            }
-            if (!Number.isInteger(hourDeparture) || hourDeparture < 0 || hourDeparture > 23) {
-              throw new Error('Invalid departure hour parameter');
-            }
-            if (!Number.isInteger(minuteDeparture) || minuteDeparture < 0 || minuteDeparture > 59) {
-              throw new Error('Invalid departure minute parameter');
-            }
-            if (!Number.isInteger(hourArrival) || hourArrival < 0 || hourArrival > 23) {
-              throw new Error('Invalid arrival hour parameter');
-            }
-            if (!Number.isInteger(minuteArrival) || minuteArrival < 0 || minuteArrival > 59) {
-              throw new Error('Invalid arrival minute parameter');
-            }
-            if (!Number.isInteger(layoverTime) || layoverTime < 1 || layoverTime > 5) {
-              throw new Error('Invalid layover time parameter');
-            }
-            
-            // Safe replacement with strictly validated parameters
-            const sqlInline = sqlTextCache
-              .replaceAll(':input_day_of_week', String(dow))
-              .replaceAll(':input_station_code', `'${stationCode.replace(/'/g, "''")}'`)
-              .replaceAll(':input_hour_departure', String(hourDeparture))
-              .replaceAll(':input_minute_departure', String(minuteDeparture))
-              .replaceAll(':input_hour_arrival', String(hourArrival))
-              .replaceAll(':input_minute_arrival', String(minuteArrival))
-              .replaceAll(':input_to_station_code', `'${toStation.code.replace(/'/g, "''")}'`)
-              .replaceAll(':input_layover_time', String(layoverTime))
-              .replaceAll(':input_to_municipality_sk', `'${toMunicipalitySk.replace(/'/g, "''")}'`);
-            
-            // Apply timeout to fallback query as well
-            const fallbackQueryPromise = duckdbConn.query(sqlInline);
-            result = await executeQueryWithTimeout(fallbackQueryPromise);
-          }
+          // Execute trip query using data layer - following Interface Segregation Principle
+          const result = await executeTripQuery({
+            dayOfWeek: dow,
+            stationCode: stationCode,
+            hourDeparture: hourDeparture,
+            minuteDeparture: minuteDeparture,
+            toStationCode: toStation.code,
+            hourArrival: hourArrival,
+            minuteArrival: minuteArrival,
+            layoverTime: layoverTime,
+            toMunicipalitySk: toMunicipalitySk
+          });
 
           const rows = result.toArray();
           
