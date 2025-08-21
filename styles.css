@@ -64,7 +64,6 @@ h1 {
   align-items: flex-start;
   padding: 16px;
   background: color-mix(in srgb, var(--card) 70%, var(--bg));
-  border: 1.5px solid var(--border);
   border-radius: 12px;
 }
 .form-group { display: flex; flex-direction: column; }
@@ -129,7 +128,6 @@ input[type="time"]:focus { outline: none; border-color: var(--primary); box-shad
 }
 .map-container {
   background: color-mix(in srgb, var(--card) 70%, var(--bg));
-  border: 1.5px solid var(--border);
   border-radius: 12px;
   height: 520px;
   overflow: hidden;
@@ -138,7 +136,6 @@ input[type="time"]:focus { outline: none; border-color: var(--primary); box-shad
 
 .results-section {
   background: color-mix(in srgb, var(--card) 70%, var(--bg));
-  border: 1.5px solid var(--border);
   border-radius: 12px;
   padding: 20px;
   min-height: 520px;
@@ -263,7 +260,6 @@ input[type="time"]:focus { outline: none; border-color: var(--primary); box-shad
   margin-top: 20px;
   padding: 16px;
   background: color-mix(in srgb, var(--card) 70%, var(--bg));
-  border: 1.5px solid var(--border);
   border-radius: 12px;
   font-size: 14px;
   color: var(--muted);
