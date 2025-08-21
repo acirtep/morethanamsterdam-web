@@ -16,6 +16,7 @@ WITH RECURSIVE train_schedule AS MATERIALIZED (
         './data/train_services.parquet/day_of_week='||input_day_of_week::varchar||'/data_0.parquet'
     ) src
     WHERE NOT (to_municipality_sk = input_to_municipality_sk AND to_station_code != input_to_station_code)
+    AND travel_time between 15 and 45
 ),
 
 planning AS (
@@ -75,7 +76,6 @@ planning AS (
             AND hour(ts.arrival_time_tb) = input_hour_arrival
         ))
         AND planning.end_reached = 0
-        and ts.travel_time <= 60
 ),
 
 distinct_paths AS (
@@ -98,6 +98,7 @@ optimal_paths AS (
         path,
         municipalities,
         time_schedule,
+        travel_time,
         len(provinces) AS m_p,
         array_agg(municipalities) OVER (ORDER BY m_p desc rows between unbounded preceding and 1 preceding) as m_m,
         number_of_monuments
@@ -109,4 +110,4 @@ SELECT
     time_schedule,
     len(list_intersect(municipalities, flatten(m_m))) as no_overlaps
 FROM optimal_paths
-ORDER BY no_overlaps ASC, number_of_monuments DESC;
+ORDER BY no_overlaps ASC, number_of_monuments DESC, travel_time;
