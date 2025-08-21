@@ -15,11 +15,7 @@
     <div class="topbar">
       <div class="brand"><span>Discover The Netherlands by train</span></div>
       <div class="top-links">
-        <a href="https://github.com/acirtep/morethanamsterdam-web" target="_blank" rel="noopener noreferrer" aria-label="View source code on GitHub">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-          </svg>
-        </a>
+        <a href="about.html">About</a>
       </div>
     </div>
     <div class="trip-form">
@@ -57,8 +53,6 @@
         <div class="input-row">
           <div class="time-selects">
             <select id="toHour" aria-label="To hour"></select>
-            <span class="time-colon">:</span>
-            <select id="toMinute" aria-label="To minute"></select>
           </div>
         </div>
       </div>
@@ -99,11 +93,11 @@
           <h3 class="how-to-heading">How to Plan Your Day Trip</h3>
           <div class="how-to-content">
             <p><strong>From Station:</strong> Choose your departure station from the dropdown or select from the map</p>
-            <p><strong>Departure Time:</strong> Set when you want to leave your starting station</p>
+            <p><strong>Departure Time:</strong> Set around what time you want to leave your starting station</p>
             <p><strong>To Station:</strong> Choose your destination station from the dropdown or select from the map</p>
-            <p><strong>Arrival Time:</strong> Set when you want to reach your destination</p>
+            <p><strong>Arrival Time:</strong> Set around what hour you want to reach your destination</p>
             <p><strong>Layover:</strong> How many hours you want to spend at your destination (1-5 hours)</p>
-            <p><strong>Day:</strong> Select the day of the week for your trip</p>
+            <p><strong>Day:</strong> Select the day of the week for your trip; holidays should be considered as Sundays</p>
             <p class="how-to-emphasis"><em>Fill in all fields and click the arrow button to get trip suggestions!</em></p>
           </div>
         </div>
@@ -226,7 +220,6 @@
       const fromHour = document.getElementById('fromHour');
       const fromMinute = document.getElementById('fromMinute');
       const toHour = document.getElementById('toHour');
-      const toMinute = document.getElementById('toMinute');
       const layoverHours = document.getElementById('layoverHours');
       const dayOfWeek = document.getElementById('dayOfWeek');
       const planBtn = document.getElementById('planTripBtn');
@@ -250,9 +243,7 @@
         // minutes 00,05,..,55
         for (let m = 0; m < 60; m += 5) {
           fromMinute.append(new Option(pad(m), pad(m)));
-          // toMinute.append(new Option(pad(m), pad(m)));
         }
-          toMinute.append(new Option(pad(0), pad(0)));
       }
       populateTimeSelects();
       // Populate day-of-week picker (Monday..Sunday) and default to Saturday
@@ -269,20 +260,17 @@
         fromHour.value = '09';
         fromMinute.value = '30';
         toHour.value = '22';
-        toMinute.value = '00';
         if (layoverHours) layoverHours.value = '02';
       })();
       // Optional: if times should influence summary later, these listeners are ready
       fromHour.addEventListener('change', updateRouteText);
       fromMinute.addEventListener('change', updateRouteText);
       toHour.addEventListener('change', updateRouteText);
-      toMinute.addEventListener('change', updateRouteText);
 
       // Any change to time pickers should remove previously planned results
       fromHour.addEventListener('change', clearPlannedResults);
       fromMinute.addEventListener('change', clearPlannedResults);
       toHour.addEventListener('change', clearPlannedResults);
-      toMinute.addEventListener('change', clearPlannedResults);
 
       // Add click listeners to input parameters - when clicked after trip planning, clean map and show only from/to stations
       function handleInputClick() {
@@ -296,7 +284,6 @@
       fromHour.addEventListener('click', handleInputClick);
       fromMinute.addEventListener('click', handleInputClick);
       toHour.addEventListener('click', handleInputClick);
-      toMinute.addEventListener('click', handleInputClick);
       layoverHours.addEventListener('click', handleInputClick);
       dayOfWeek.addEventListener('click', handleInputClick);
 
@@ -572,8 +559,7 @@
           
           // Get arrival time from selects
           const hourArrival = parseInt(toHour.value, 10);
-          const minuteArrival = parseInt(toMinute.value, 10);
-          
+
           // Get layover time from select
           const layoverTime = parseInt(layoverHours.value, 10);
           
@@ -593,9 +579,6 @@
           if (!Number.isInteger(hourArrival) || hourArrival < 0 || hourArrival > 23) {
             throw new Error('Invalid arrival hour');
           }
-          if (!Number.isInteger(minuteArrival) || minuteArrival < 0 || minuteArrival > 59) {
-            throw new Error('Invalid arrival minute');
-          }
           if (!Number.isInteger(layoverTime) || layoverTime < 1 || layoverTime > 5) {
             throw new Error('Invalid layover time');
           }
@@ -608,7 +591,6 @@
             minuteDeparture: minuteDeparture,
             toStationCode: toStation.code,
             hourArrival: hourArrival,
-            minuteArrival: minuteArrival,
             layoverTime: layoverTime,
             toMunicipalitySk: toMunicipalitySk
           });

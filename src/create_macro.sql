@@ -5,7 +5,6 @@ CREATE OR REPLACE MACRO get_trips(
                   input_minute_departure,
                   input_to_station_code,
                   input_hour_arrival,
-                  input_minute_arrival,
                   input_layover_time,
                   input_to_municipality_sk
 ) AS TABLE

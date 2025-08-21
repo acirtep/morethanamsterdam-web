@@ -253,7 +253,6 @@ export async function executeTripQuery(params) {
     minuteDeparture,
     toStationCode,
     hourArrival,
-    minuteArrival,
     layoverTime,
     toMunicipalitySk
   } = params;
@@ -272,7 +271,6 @@ export async function executeTripQuery(params) {
       :input_minute_departure,
       :input_to_station_code,
       :input_hour_arrival,
-      :input_minute_arrival,
       :input_layover_time,
       :input_to_municipality_sk
     )
@@ -303,7 +301,6 @@ export async function executeTripQuery(params) {
       input_hour_departure: hourDeparture,
       input_minute_departure: minuteDeparture,
       input_hour_arrival: hourArrival,
-      input_minute_arrival: minuteArrival,
       input_to_station_code: toStationCode,
       input_layover_time: layoverTime,
       input_to_municipality_sk: toMunicipalitySk
@@ -330,7 +327,6 @@ export async function executeTripQuery(params) {
         ${minuteDeparture},
         '${toStationCode.replace(/'/g, "''")}',
         ${hourArrival},
-        ${minuteArrival},
         ${layoverTime},
         '${toMunicipalitySk.replace(/'/g, "''")}'
       )

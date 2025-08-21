@@ -269,3 +269,56 @@ input[type="time"]:focus { outline: none; border-color: var(--primary); box-shad
 .disclaimer a {
   color: var(--primary);
 }
+
+/* About page styles */
+.about-content {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px 0;
+}
+
+.about-section {
+  margin-bottom: 32px;
+}
+
+.about-section h2 {
+  color: var(--text);
+  margin-bottom: 16px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.about-section p {
+  line-height: 1.6;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+
+.feature-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.feature-list li:last-child {
+  border-bottom: none;
+}
+
+.about-footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 2px solid var(--border);
+  text-align: center;
+}
+
+.about-footer p {
+  font-size: 18px;
+  color: var(--muted);
+}
