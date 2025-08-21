@@ -32,6 +32,7 @@ jobs:
           mkdir site
           cp -r data site/
           cp -r src site/
+          cp about.html site/
           cp index.html site/
           cp styles.css site/
           cd site
