@@ -15,7 +15,7 @@ WITH RECURSIVE train_schedule AS MATERIALIZED (
         './data/train_services.parquet/day_of_week='||input_day_of_week::varchar||'/data_0.parquet'
     ) src
     WHERE NOT (to_municipality_sk = input_to_municipality_sk AND to_station_code != input_to_station_code)
-    AND travel_time between 15 and 45
+    AND travel_time between 15 and 60
 ),
 
 planning AS (

@@ -13,7 +13,7 @@
 <body>
   <div class="container">
     <div class="topbar">
-      <div class="brand"><span>Discover The Netherlands by train</span></div>
+      <div class="brand"><span>Discover the Netherlands by train</span></div>
       <div class="top-links">
         <a href="about.html">About</a>
       </div>
@@ -228,7 +228,7 @@
       function pad(n) { return String(n).padStart(2, '0'); }
       function populateTimeSelects() {
         // hours 00..23 for From/To
-        for (let h = 0; h < 24; h++) {
+        for (let h = 6; h < 24; h++) {
           fromHour.append(new Option(pad(h), pad(h)));
           toHour.append(new Option(pad(h), pad(h)));
         }
@@ -257,7 +257,7 @@
       if (dayOfWeek) dayOfWeek.addEventListener('change', clearPlannedResults);
       // Initialize time defaults only (stations set after population)
       (function initTimeDefaults() {
-        fromHour.value = '09';
+        fromHour.value = '08';
         fromMinute.value = '30';
         toHour.value = '22';
         if (layoverHours) layoverHours.value = '02';
