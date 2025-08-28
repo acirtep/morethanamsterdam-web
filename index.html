@@ -361,6 +361,7 @@
           try { pathLayer.clearLayers(); } catch (_) { /* ignore */ }
         }
         if (planStatus) planStatus.textContent = '';
+        hideAllStations();
         tripPlanned = false; // Reset trip planned flag
       }
 
@@ -1191,6 +1192,8 @@
                 // Update station display
                 if (filteredPathRoutes && filteredPathRoutes.length > 0) {
                   plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
+                } else if (filteredPathRoutes && filteredPathRoutes.length === 0) {
+                  hideAllStations();
                 } else if (originalPathRoutes) {
                   plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
                 }
@@ -1231,6 +1234,8 @@
                 
                 if (filteredPathRoutes && filteredPathRoutes.length > 0) {
                   plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
+                } else if (filteredPathRoutes && filteredPathRoutes.length === 0) {
+                  hideAllStations();
                 } else if (originalPathRoutes) {
                   plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
                 }
@@ -1285,7 +1290,10 @@
               // Update station display to show only stations from filtered paths
               if (filteredPathRoutes && filteredPathRoutes.length > 0) {
                 plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
-              } else if (originalPathRoutes) {
+              } else if (filteredPathRoutes && filteredPathRoutes.length === 0) {
+                hideAllStations();
+              } else
+                if (originalPathRoutes) {
                 plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
               }
             };
@@ -1389,7 +1397,10 @@
                       updateResultsDisplay();
                       if (filteredPathRoutes && filteredPathRoutes.length > 0) {
                         plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
-                      } else if (originalPathRoutes) {
+                      } else if (filteredPathRoutes && filteredPathRoutes.length === 0) {
+                        hideAllStations();
+                      } else
+                        if (originalPathRoutes) {
                         plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
                       }
                     }
@@ -1418,6 +1429,8 @@
                 // Update station display with proper styling for selected path
                 if (filteredPathRoutes && filteredPathRoutes.length > 0) {
                   plotAllTripStationsOnMap(filteredPathRoutes, currentlySelectedRoute);
+                } else if (filteredPathRoutes && filteredPathRoutes.length === 0) {
+                  hideAllStations();
                 } else if (originalPathRoutes) {
                   plotAllTripStationsOnMap(originalPathRoutes, currentlySelectedRoute);
                 }
