@@ -656,27 +656,6 @@
             return null;
           }).filter(Boolean);
           
-          // Helper function to calculate travel time between two timestamps
-          function calculateTravelTime(startTime, endTime) {
-            if (!startTime || !endTime) return null;
-            try {
-              const start = new Date(startTime);
-              const end = new Date(endTime);
-              const diffMs = end - start;
-              const hours = Math.floor(diffMs / (1000 * 60 * 60));
-              const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-              
-              if (hours > 0) {
-                return `${hours}h:${minutes.toString().padStart(2, '0')}m`;
-              } else {
-                return `${minutes}m`;
-              }
-            } catch (e) {
-              console.warn('Error calculating travel time:', e);
-              return null;
-            }
-          }
-          
           // Prepare path data for clickable display (don't plot automatically)
           plannedLayer.clearLayers();
           const pathRoutes = [];
@@ -1116,30 +1095,6 @@
                     stationDiv.appendChild(connector);
                     stationDiv.appendChild(stationName);
                     treeContainer.appendChild(stationDiv);
-                    
-                    // Add vertical connector line with travel time for non-last stations
-                    if (stationIndex < route.pathStations.length - 1) {
-                      const verticalLine = document.createElement('div');
-                      verticalLine.style.cssText = 'color: var(--muted); margin-left: 6px; font-weight: 600; display: flex; align-items: center; gap: 8px;';
-                      
-                      // Add travel time if available
-                      let travelTimeText = '';
-                      if (route.timeSchedule && route.timeSchedule.length >= 2) {
-                        const currentTimeIndex = stationIndex === 0 ? 0 : stationIndex * 2;
-                        const nextTimeIndex = currentTimeIndex + 1;
-                        
-                        if (route.timeSchedule[currentTimeIndex] && route.timeSchedule[nextTimeIndex]) {
-                          const travelTime = calculateTravelTime(
-                            route.timeSchedule[currentTimeIndex], 
-                            route.timeSchedule[nextTimeIndex]
-                          );
-                          travelTimeText = travelTime ? ` (${travelTime})` : '';
-                        }
-                      }
-                      
-                      verticalLine.textContent = `│${travelTimeText}`;
-                      treeContainer.appendChild(verticalLine);
-                    }
                   });
                   
                   return treeContainer;
