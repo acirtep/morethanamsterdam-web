@@ -33,7 +33,7 @@ jobs:
           cp -r data site/
           cp -r src site/
           cp -r images site/
-          cp about.html site/
+          cp -r pages site/
           cp index.html site/
           cp styles.css site/
           cd site
