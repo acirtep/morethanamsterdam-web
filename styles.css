@@ -349,3 +349,8 @@ input[type="time"]:focus { outline: none; border-color: var(--primary); box-shad
   font-size: 18px;
   color: var(--muted);
 }
+
+img {
+  width: 100%;
+  height: auto;
+}

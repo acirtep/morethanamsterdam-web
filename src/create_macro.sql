@@ -89,7 +89,7 @@ distinct_paths AS (
     WHERE
         to_station_code = input_to_station_code
         AND hour(arrival_time_tb) = input_hour_arrival
-    QUALIFY row_number() OVER (PARTITION BY path ORDER BY travel_time) = 1
+    QUALIFY row_number() OVER (PARTITION BY list_sort(path) ORDER BY travel_time) = 1
 ),
 
 optimal_paths AS (
