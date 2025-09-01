@@ -1279,18 +1279,33 @@
                       connector.style.cssText =
                         "color: var(--muted); margin-right: 8px; font-weight: 600;";
 
+                      const schedule = document.createElement("span");
+                      schedule.style.cssText =
+                        "color: var(--muted); margin-right: 0px; margin-left: 2px; font-size: x-small;";
+
                       if (stationIndex === 0) {
-                        connector.textContent = "├─";
+                        schedule.textContent = route.timeSchedule[0];
+                        connector.textContent = " ⎡";
                         connector.style.color = "#007bff"; // Blue for start
+                        schedule.style.color = "#007bff";
                       } else if (
                         stationIndex ===
                         route.pathStations.length - 1
                       ) {
-                        connector.textContent = "└─";
+                        schedule.textContent =
+                          route.timeSchedule[route.timeSchedule.length - 1];
+                        connector.textContent = " ⎣";
                         connector.style.color = "#ff8c00"; // Orange for end
+                        schedule.style.color = "#ff8c00";
                       } else {
-                        connector.textContent = "├─";
+                        schedule.textContent = route.timeSchedule[
+                          2 * stationIndex - 1
+                        ]
+                          .concat("\n")
+                          .concat(route.timeSchedule[2 * stationIndex]);
+                        connector.textContent = " ├─";
                         connector.style.color = "#6f42c1"; // Purple for intermediate
+                        schedule.style.color = "#6f42c1";
                       }
 
                       // Create station name element with index
@@ -1299,10 +1314,7 @@
                         "font-weight: 600; color: var(--text);";
                       stationName.textContent = `${stationIndex + 1}. ${station.name}`;
 
-                      // Station code removed as per requirements
-
-                      // Time information removed as per requirements
-
+                      //stationDiv.appendChild(schedule);
                       stationDiv.appendChild(connector);
                       stationDiv.appendChild(stationName);
                       treeContainer.appendChild(stationDiv);
