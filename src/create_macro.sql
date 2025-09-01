@@ -23,7 +23,7 @@ planning AS (
         from_station_code,
         to_station_code,
         [from_station_code, to_station_code] AS path,
-        [departure_time_tb, arrival_time_tb] AS time_schedule,
+        [strftime(departure_time_tb, '%H:%M'), strftime(arrival_time_tb, '%H:%M')] AS time_schedule,
         [from_municipality_sk, to_municipality_sk] AS municipalities,
         [from_province_sk, to_province_sk] AS provinces,
         travel_time,
@@ -45,8 +45,8 @@ planning AS (
         ts.to_station_code,
         array_append(path, ts.to_station_code) AS path,
         array_append(
-            array_append(time_schedule, ts.departure_time_tb),
-            ts.arrival_time_tb
+            array_append(time_schedule, strftime(ts.departure_time_tb, '%H:%M')),
+            strftime(ts.arrival_time_tb, '%H:%M')
         ) AS time_schedule,
         array_append(municipalities, ts.to_municipality_sk) AS municipalities,
         array_append(provinces, ts.to_province_sk) AS provinces,

@@ -33,7 +33,7 @@ jobs:
       - name: Download data
         working-directory: etl
         run:
-          /home/runner/.duckdb/cli/latest/duckdb -c ".read download_data.sql" -c "execute download_data('${{ github.event.inputs.execution_date }}')"
+          /home/runner/.duckdb/cli/latest/duckdb -c ".read download_data.sql" -c "set timezone='Europe/Amsterdam'; execute download_data('${{ github.event.inputs.execution_date }}')"
 
       - name: Store metrics after download
         working-directory: data
