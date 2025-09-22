@@ -134,7 +134,7 @@ export async function ensureDuckDB() {
   if (duckdbReady) return;
 
   // Security: Use specific version with integrity verification
-  const DUCKDB_VERSION = "1.29.1-dev269.0";
+  const DUCKDB_VERSION = "1.30.0";
   const duckdb = await import(
     `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`
   );
@@ -317,7 +317,7 @@ export async function executeTripQuery(params) {
   const sqlQuery = `
     SELECT * FROM get_trips(
       :input_day_of_week,
-      :input_station_code,
+      :input_from_station_code,
       :input_hour_departure,
       :input_minute_departure,
       :input_to_station_code,
@@ -348,7 +348,7 @@ export async function executeTripQuery(params) {
     const stmt = await duckdbConn.prepare(sqlQuery);
     const queryPromise = stmt.query({
       input_day_of_week: dayOfWeek,
-      input_station_code: stationCode,
+      input_from_station_code: stationCode,
       input_hour_departure: hourDeparture,
       input_minute_departure: minuteDeparture,
       input_hour_arrival: hourArrival,

@@ -115,19 +115,19 @@
               </p>
               <p>
                 <strong>Departure Time:</strong> Set around what time you want
-                to leave your starting station.
+                to leave from your starting station.
               </p>
               <p>
                 <strong>To Station:</strong> Choose your destination station
                 from the dropdown or select from the map.
               </p>
               <p>
-                <strong>Arrival Time:</strong> Set around what hour you want to
+                <strong>Arrival Time:</strong> Set the hour you want to
                 reach your destination.
               </p>
               <p>
                 <strong>Layover:</strong> How many hours you want to spend at
-                each stop (1-5 hours).
+                each stop (2-5 hours).
               </p>
               <p>
                 <strong>Day:</strong> Select the day of the week for your trip;
@@ -298,7 +298,7 @@
           if (layoverHours)
             layoverHours.addEventListener("change", clearPlannedResults);
           // minutes 00,05,..,55
-          for (let m = 0; m < 60; m += 5) {
+          for (let m = 0; m < 60; m += 15) {
             fromMinute.append(new Option(pad(m), pad(m)));
           }
         }

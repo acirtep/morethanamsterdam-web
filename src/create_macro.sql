@@ -1,6 +1,6 @@
 CREATE OR REPLACE MACRO get_trips(
                   input_day_of_week,
-                  input_station_code,
+                  input_from_station_code,
                   input_hour_departure,
                   input_minute_departure,
                   input_to_station_code,
@@ -9,8 +9,10 @@ CREATE OR REPLACE MACRO get_trips(
                   input_to_municipality_sk
 ) AS TABLE
 WITH RECURSIVE train_schedule AS MATERIALIZED (
-    SELECT src.*,
-            date_diff('minute', departure_time_tb, arrival_time_tb) as travel_time
+    SELECT src.* exclude (departure_time_tb, arrival_time_tb),
+            date_diff('minute', departure_time_tb, arrival_time_tb) as travel_time,
+            time_bucket(interval '15' minutes, departure_time_tb) departure_time_tb,
+            time_bucket(interval '15' minutes, arrival_time_tb) arrival_time_tb
     FROM read_parquet(
         './data/train_services.parquet/day_of_week='||input_day_of_week::varchar||'/data_0.parquet'
     ) src
@@ -35,7 +37,7 @@ planning AS (
     FROM train_schedule
     JOIN './data/train_stations.csv' tss on to_station_code = station_code
     WHERE
-        from_station_code = input_station_code
+        from_station_code = input_from_station_code
         AND hour(departure_time_tb) = input_hour_departure
         AND minute(departure_time_tb) = input_minute_departure
         AND to_station_code != input_to_station_code
@@ -65,7 +67,7 @@ planning AS (
     JOIN train_schedule ts
         ON
             planning.to_station_code = ts.from_station_code
-            AND time_bucket(INTERVAL '15 minutes', planning.arrival_time_tb + INTERVAL  (input_layover_time) HOUR) = time_bucket(INTERVAL '15 minutes', ts.departure_time_tb)
+            AND  planning.arrival_time_tb + INTERVAL  (input_layover_time) HOUR = ts.departure_time_tb
     JOIN './data/train_stations.csv' tss on ts.to_station_code = tss.station_code
     WHERE
         (
