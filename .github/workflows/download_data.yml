@@ -36,7 +36,7 @@ jobs:
           /home/runner/.duckdb/cli/latest/duckdb -c ".read download_data.sql" -c "set timezone='Europe/Amsterdam'; execute download_data('${{ github.event.inputs.execution_date }}')"
 
       - name: Store metrics after download
-        working-directory: data
+        working-directory: site/data
         run:
           /home/runner/.duckdb/cli/latest/duckdb -c "summarize 'train_services.parquet/*/*.parquet'"
 

@@ -27,17 +27,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build site
-        run: |
-          mkdir site
-          cp -r data site/
-          cp -r src site/
-          cp -r images site/
-          cp -r pages site/
-          cp index.html site/
-          cp styles.css site/
-          cd site
-          ls -l
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
