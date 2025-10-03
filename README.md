@@ -3,7 +3,7 @@
 A Wasm application for planning multi-leg train day trips.
 The scope of the application is to help users plan exploration days in the Netherlands.
 
-![screenshot](/images/day_trip_example.png)
+![screenshot](/site/images/day_trip_example.png)
 
 The application uses DuckDB (Wasm) to process and analyze train schedule open data from [Rijden de Treinen](https://www.rijdendetreinen.nl/en/open-data).
 The user can select departure and arrival stations and time, with the possibility to start and end in the same train station.
