@@ -24,7 +24,7 @@ COPY (
                sm.province_sk
         FROM read_csv('https://opendata.rijdendetreinen.nl/public/services/services-'||strftime($1::date, '%Y-%m')||'.csv.gz')
         INNER JOIN calendar_dates ON "Service:Date" = calendar_dates.calendar_date
-        INNER JOIN '../data/train_stations.csv' sm
+        INNER JOIN '../site/data/train_stations.csv' sm
             ON "Stop:Station code" = sm.station_code
     ),
     exploded_raw_data AS (
@@ -49,7 +49,7 @@ COPY (
         from_municipality_sk != to_municipality_sk
         AND date_diff('minute', departure_time_tb, arrival_time_tb) <= 60
 ) 
-TO '../data/train_services.parquet'
+TO '../site/data/train_services.parquet'
 WITH (
     format 'parquet', 
     compression 'zstd', 
