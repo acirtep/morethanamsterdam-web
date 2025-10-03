@@ -26,7 +26,7 @@ jobs:
           /home/runner/.duckdb/cli/latest/duckdb --version
 
       - name: Metrics before download
-        working-directory: data
+        working-directory: site/data
         run:
           /home/runner/.duckdb/cli/latest/duckdb -c "summarize 'train_services.parquet/*/*.parquet'"
 
